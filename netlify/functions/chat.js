@@ -1,1 +1,397 @@
+const Anthropic = require('@anthropic-ai/sdk');
 
+// ─── Config ────────────────────────────────────────────────────────────────
+const CODA_API_KEY   = process.env.CODA_API_KEY;
+const CODA_DOC_ID    = 'cKc2cGnJOT';
+const CODA_TABLE_ID  = 'grid-l-jaTOjaOG';
+const ZOHO_CLIENT_ID     = process.env.ZOHO_CLIENT_ID;
+const ZOHO_CLIENT_SECRET = process.env.ZOHO_CLIENT_SECRET;
+const ZOHO_REFRESH_TOKEN = process.env.ZOHO_REFRESH_TOKEN;
+const ZOHO_ORG_ID        = '914791857';
+const ANTHROPIC_API_KEY  = process.env.ANTHROPIC_API_KEY;
+
+// ─── Department & Agent IDs ────────────────────────────────────────────────
+const DEPT = {
+  zakat_distribution: '1253395000000435085',
+  zakat_education:    '1253395000000457123',
+  donor_management:   '1253395000000445607',
+  finance:            '1253395000000485377',
+  general:            '1253395000000468725',
+};
+const AGENT = {
+  shahnaz:  '1253395000000474001',
+  ahmed:    '1253395000000428005',
+  farooq:   '1253395000000472001',
+  misturah: '1253395000000783001',
+  munir:    '1253395000000470001',
+};
+
+// ─── Coda row cache ────────────────────────────────────────────────────────
+let codaRows    = null;
+let cacheExpiry = 0;
+const CACHE_TTL = 10 * 60 * 1000;
+
+async function getCodaRows() {
+  const now = Date.now();
+  if (codaRows && now < cacheExpiry) return codaRows;
+  const res = await fetch(
+    `https://coda.io/apis/v1/docs/${CODA_DOC_ID}/tables/${CODA_TABLE_ID}/rows` +
+    `?limit=500&valueFormat=simpleWithArrays&useColumnNames=true`,
+    { headers: { Authorization: `Bearer ${CODA_API_KEY}` } }
+  );
+  if (!res.ok) throw new Error(`Coda fetch failed: ${res.status}`);
+  const data = await res.json();
+  codaRows    = data.items || [];
+  cacheExpiry = now + CACHE_TTL;
+  console.log(`[Coda] Cache refreshed — ${codaRows.length} rows`);
+  return codaRows;
+}
+
+function searchCodaRows(query, rows) {
+  const words = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  if (!words.length) return [];
+  const scored = rows.map(row => {
+    const v        = row.values;
+    const question = (v['Question'] || '').toLowerCase();
+    const answer   = (v['Answer']   || '').toLowerCase();
+    const tags     = (v['Tags']     || '').toLowerCase();
+    const category = (v['Category'] || '').toLowerCase();
+    const haystack = `${question} ${answer} ${tags} ${category}`;
+    let score = 0;
+    for (const word of words) {
+      if (haystack.includes(word)) score += 1;
+      if (question.includes(word)) score += 2;
+      if (tags.includes(word))     score += 1;
+    }
+    return { score, v };
+  })
+  .filter(r => r.score > 0)
+  .sort((a, b) => b.score - a.score)
+  .slice(0, 4);
+  return scored.map(r => ({
+    category: r.v['Category'] || '',
+    question: r.v['Question'] || '',
+    answer:   r.v['Answer']   || '',
+  }));
+}
+
+// ─── NZF Website search ────────────────────────────────────────────────────
+const NZF_PAGES = [
+  { url: 'https://nzf.org.au/about/',                  keywords: ['about','who','nzf','organisation','mission','vision','history','team'] },
+  { url: 'https://nzf.org.au/apply/',                  keywords: ['apply','application','help','assistance','eligible','eligibility','need','needy','receive','recipient','support','hardship'] },
+  { url: 'https://nzf.org.au/programs/',               keywords: ['program','programs','services','what we do','offer','initiative'] },
+  { url: 'https://nzf.org.au/program/emergency-relief/', keywords: ['emergency','relief','urgent','crisis','immediate'] },
+  { url: 'https://nzf.org.au/program/crisis-accommodation/', keywords: ['accommodation','housing','homeless','shelter','rent'] },
+  { url: 'https://nzf.org.au/calculate/',              keywords: ['calculate','calculator','how much','compute','work out','figure out'] },
+  { url: 'https://nzf.org.au/pay/zakat/',              keywords: ['pay zakat','give zakat','donate zakat','paying','make payment','contribute'] },
+  { url: 'https://nzf.org.au/pay/sadaqah/',            keywords: ['sadaqah','sadaqa','voluntary','charity','give sadaqah','donate'] },
+  { url: 'https://nzf.org.au/pay/fidyah/',             keywords: ['fidyah','missed fast','fasting','unable to fast'] },
+  { url: 'https://nzf.org.au/pay/fitr/',               keywords: ['fitr','zakat ul fitr','zakat al fitr','fitrah','ramadan zakat','eid'] },
+  { url: 'https://nzf.org.au/pay/tainted-wealth/',     keywords: ['tainted','interest','riba','haram income','purify','cleanse'] },
+  { url: 'https://nzf.org.au/contact/',                keywords: ['contact','phone','email','reach','address','office','call','get in touch'] },
+  { url: 'https://nzf.org.au/faq/',                    keywords: ['faq','frequently asked','question','answer','common'] },
+  { url: 'https://nzf.org.au/zakat-faq/',              keywords: ['zakat faq','zakat question','zakat answer'] },
+  { url: 'https://nzf.org.au/learn/',                  keywords: ['learn','education','understand','basics','introduction','what is zakat'] },
+  { url: 'https://nzf.org.au/guides/',                 keywords: ['guide','guides','how to','handbook','resource','individual','family','retiree'] },
+  { url: 'https://nzf.org.au/zakat-resources/',        keywords: ['resource','resources','material','tools','reference'] },
+  { url: 'https://nzf.org.au/zakat-impact/',           keywords: ['impact','outcomes','results','distributed','helped','statistics','transparency'] },
+  { url: 'https://nzf.org.au/right-to-zakat/',         keywords: ['who can receive','who is eligible','right to zakat','recipients','asnaf','deserving'] },
+  { url: 'https://nzf.org.au/local-need/',             keywords: ['local','australia','local need','australian muslims','locally','why local'] },
+  { url: 'https://nzf.org.au/business-zakat/',         keywords: ['business','company','trade','commercial','business zakat','stocks','inventory'] },
+  { url: 'https://nzf.org.au/zakat-on-superannuation/', keywords: ['super','superannuation','retirement','pension','smsf'] },
+  { url: 'https://nzf.org.au/zakat-crypto/',           keywords: ['crypto','bitcoin','ethereum','cryptocurrency','digital asset'] },
+  { url: 'https://nzf.org.au/zakat-for-women/',        keywords: ['women','woman','female','sister','jewellery','jewelry','gold','ornament'] },
+  { url: 'https://nzf.org.au/missed-zakat/',           keywords: ['missed','past years','owe','back pay','previous years','unpaid','forgotten'] },
+  { url: 'https://nzf.org.au/bank/',                   keywords: ['bank','bsb','account number','bank transfer','eft','payid','bpay'] },
+  { url: 'https://nzf.org.au/tax-receipt/',            keywords: ['tax','receipt','deductible','ato','tax return','deduction','dgr'] },
+  { url: 'https://nzf.org.au/cases/',                  keywords: ['cases','case stories','stories','who we help','beneficiaries'] },
+  { url: 'https://nzf.org.au/zakat-clinic/',           keywords: ['clinic','consultation','book','appointment','advisor','scholar','sheikh'] },
+  { url: 'https://nzf.org.au/zakat-masterclass/',      keywords: ['masterclass','class','event','webinar','seminar','workshop'] },
+  { url: 'https://nzf.org.au/blog/how-to-calculate-zakat-australia-2025/', keywords: ['how to calculate','calculation guide','step by step'] },
+  { url: 'https://nzf.org.au/blog/what-is-zakat-in-islam/',                keywords: ['what is zakat','define zakat','meaning of zakat','zakat definition'] },
+  { url: 'https://nzf.org.au/blog/what-is-nisab/',                         keywords: ['nisab','threshold','minimum','gold nisab','silver nisab'] },
+  { url: 'https://nzf.org.au/blog/zakat-guide-superannuation/',            keywords: ['super guide','superannuation guide'] },
+  { url: 'https://nzf.org.au/blog/zakat-guide-for-businesses/',            keywords: ['business guide','company zakat guide'] },
+  { url: 'https://nzf.org.au/blog/what-is-fidyah-and-how-to-calculate-fidyah/', keywords: ['fidyah guide','how much fidyah','calculate fidyah'] },
+  { url: 'https://nzf.org.au/blog/what-is-kaffarah/',                      keywords: ['kaffarah','expiation','penance','broken fast'] },
+  { url: 'https://nzf.org.au/blog/sadaqah-vs-sadaqah-jariyah/',            keywords: ['sadaqah jariyah','ongoing charity','jariyah'] },
+  { url: 'https://nzf.org.au/blog/how-to-get-rid-of-interest-money-in-islam/', keywords: ['interest money','riba','bank interest','get rid','purify income'] },
+  { url: 'https://nzf.org.au/poor-and-needy/',         keywords: ['poor','needy','fuqara','masakin','low income'] },
+];
+
+async function searchNZFWebsite(query) {
+  const q      = query.toLowerCase();
+  const scored = NZF_PAGES
+    .map(p => ({ ...p, score: p.keywords.filter(kw => q.includes(kw)).length }))
+    .filter(p => p.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 2);
+  if (!scored.length) return { found: false };
+  const results = await Promise.all(scored.map(async page => {
+    try {
+      const res = await fetch(page.url, {
+        headers: { 'User-Agent': 'NZFChatAgent/1.0' },
+        signal: AbortSignal.timeout(6000),
+      });
+      if (!res.ok) return null;
+      const html = await res.text();
+      let text = html
+        .replace(/<script[^>]*?>[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[^>]*?>[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<svg[^>]*?>[\s\S]*?<\/svg>/gi, ' ')
+        .replace(/<nav[^>]*?>[\s\S]*?<\/nav>/gi, ' ')
+        .replace(/<footer[^>]*?>[\s\S]*?<\/footer>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>')
+        .replace(/&nbsp;/g,' ').replace(/&#39;/g,"'").replace(/&quot;/g,'"')
+        .replace(/\s+/g,' ').trim();
+      text = text.length > 1500 ? text.slice(0, 1500) + '…' : text;
+      return { url: page.url, content: text };
+    } catch { return null; }
+  }));
+  const valid = results.filter(Boolean);
+  return valid.length ? { found: true, results: valid } : { found: false };
+}
+
+// ─── Zoho OAuth ────────────────────────────────────────────────────────────
+async function getZohoAccessToken() {
+  const res = await fetch('https://accounts.zoho.com/oauth/v2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      refresh_token: ZOHO_REFRESH_TOKEN,
+      client_id:     ZOHO_CLIENT_ID,
+      client_secret: ZOHO_CLIENT_SECRET,
+      grant_type:    'refresh_token',
+    }),
+  });
+  const data = await res.json();
+  if (!data.access_token) throw new Error(`Zoho token refresh failed: ${JSON.stringify(data)}`);
+  return data.access_token;
+}
+
+// ─── Create Zoho Desk ticket ───────────────────────────────────────────────
+async function createZohoDeskTicket(input) {
+  const {
+    name, email, subject, description, department,
+    caseNameOnFile, dateApplied, emailOnCase,
+    donationDate, donationType, paymentMethod, emailUsedOnline, amountPaid,
+    phone, preferredContact,
+  } = input;
+
+  const token      = await getZohoAccessToken();
+  const deptId     = DEPT[department] || DEPT.general;
+  const agentMap   = { zakat_distribution: AGENT.shahnaz, zakat_education: AGENT.ahmed, donor_management: AGENT.farooq, finance: AGENT.misturah, general: AGENT.munir };
+  const assigneeId = agentMap[department] || AGENT.munir;
+
+  let desc = description + '\n\n';
+  if (department === 'zakat_distribution' && (caseNameOnFile || dateApplied || emailOnCase)) {
+    desc += '── Application Details ──\n';
+    if (caseNameOnFile) desc += `Name on case: ${caseNameOnFile}\n`;
+    if (dateApplied)    desc += `Date applied: ${dateApplied}\n`;
+    if (emailOnCase)    desc += `Email on case: ${emailOnCase}\n`;
+  }
+  if (department === 'donor_management' && (donationDate || donationType || paymentMethod || emailUsedOnline || amountPaid)) {
+    desc += '── Donation Details ──\n';
+    if (donationDate)    desc += `Date of payment: ${donationDate}\n`;
+    if (donationType)    desc += `Type of donation: ${donationType}\n`;
+    if (paymentMethod)   desc += `Payment method: ${paymentMethod}\n`;
+    if (emailUsedOnline) desc += `Email used online: ${emailUsedOnline}\n`;
+    if (amountPaid)      desc += `Amount paid: ${amountPaid}\n`;
+  }
+  if (preferredContact) desc += `\n── Contact Preference ──\nPreferred contact: ${preferredContact}\n`;
+  if (phone)            desc += `Mobile: ${phone}\n`;
+  desc += '\n── Raised via ──\nNZF Website Chat Agent';
+
+  const parts    = (name || '').trim().split(/\s+/);
+  const lastName = parts.length > 1 ? parts.slice(1).join(' ') : parts[0] || 'Visitor';
+
+  const res = await fetch('https://desk.zoho.com/api/v1/tickets', {
+    method: 'POST',
+    headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json', orgId: ZOHO_ORG_ID },
+    body: JSON.stringify({ subject, description: desc.trim(), departmentId: deptId, assigneeId, status: 'Open', channel: 'Web', phone: phone || undefined, contact: { lastName, email } }),
+  });
+  const data = await res.json();
+  console.log('[ZohoDesk] Response:', JSON.stringify(data).slice(0, 300));
+  if (data.id) return { success: true, ticketId: data.id, ticketNumber: data.ticketNumber };
+  return { success: false, error: data.message || JSON.stringify(data) };
+}
+
+// ─── Tools (website search + ticket only — Coda is pre-fetched) ────────────
+const TOOLS = [
+  {
+    name: 'search_nzf_website',
+    description: 'Fetch additional information from nzf.org.au. Use ONLY when: (1) visitor explicitly asks for more detail after a Coda answer, or (2) the question is about NZF programs, how to apply, pay, donate, contact us, or get resources. Do NOT use for Zakat knowledge questions that are already answered in context.',
+    input_schema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
+  },
+  {
+    name: 'create_zoho_desk_ticket',
+    description: 'Create a support ticket in Zoho Desk. Only call after collecting all required fields from the visitor.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' }, email: { type: 'string' }, subject: { type: 'string' },
+        description: { type: 'string' },
+        department: { type: 'string', enum: ['zakat_distribution','zakat_education','donor_management','finance','general'] },
+        caseNameOnFile: { type: 'string' }, dateApplied: { type: 'string' }, emailOnCase: { type: 'string' },
+        donationDate: { type: 'string' }, donationType: { type: 'string' }, paymentMethod: { type: 'string' },
+        emailUsedOnline: { type: 'string' }, amountPaid: { type: 'string' },
+        preferredContact: { type: 'string', enum: ['email','mobile'] }, phone: { type: 'string' },
+      },
+      required: ['name','email','subject','description','department'],
+    },
+  },
+];
+
+// ─── System prompt builder ─────────────────────────────────────────────────
+function buildSystemPrompt(visitorName, visitorEmail, codaResults) {
+  const identity = visitorName && visitorEmail ? `\nVISITOR: ${visitorName} | ${visitorEmail}\n` : '';
+
+  const codaSection = codaResults.length > 0
+    ? `\n━━━ CODA KNOWLEDGE BASE — USE THIS FIRST ━━━\n` +
+      codaResults.map((r, i) => `[${i+1}] Category: ${r.category}\nQ: ${r.question}\nA: ${r.answer}`).join('\n\n') +
+      `\n━━━ END OF CODA RESULTS ━━━\n`
+    : `\n━━━ CODA: No matching results for this query ━━━\n`;
+
+  return `You are the NZF (National Zakat Foundation Australia) website assistant. You represent NZF — always say "we", "our", "us". Greet new visitors with "Assalamu Alaikum".
+${identity}${codaSection}
+━━━ RESPONSE RULES ━━━
+1. If Coda results are relevant → answer from them directly. SHORT (2-4 sentences). Then ask "Would you like more detail or related resources on our website?"
+2. If visitor says yes, asks a follow-up, or asks "where can I find more" → immediately call search_nzf_website for the same topic and share what you find including the URL.
+3. If Coda is empty and it's an NZF organisational question (apply, programs, pay, contact) → call search_nzf_website immediately.
+4. If it's a personal query (their own application/case or donation) → collect info, create ticket.
+5. If nothing found anywhere → apologise, offer to raise with team, ask email or mobile preference, create ticket.
+
+━━━ WHEN TO OFFER A TICKET ━━━
+Always offer to raise a ticket and connect the visitor with a team member when:
+- They say they want to "speak to someone", "talk to someone", "get help", "discuss my situation", "need advice", or any similar phrase
+- Their question involves a personal circumstance (medical condition, financial hardship, specific situation) that requires human judgement
+- They seem stuck, frustrated, or their question cannot be fully resolved by information alone
+- They say "no" to further information but still seem to have an unresolved need
+
+When offering: say "I can raise this with one of our team members who can discuss your situation directly — would that be helpful?"
+If they say yes → ask email or mobile preference → create ticket → zakat_education for Zakat questions, general for everything else.
+If they say no → close warmly with contact details: 1300 663 729 or nzf.org.au/contact/
+
+NEVER redirect someone to "contact a local mosque" or external parties without first offering to raise a ticket with our own team.
+
+NEVER answer from your own knowledge. NEVER contradict Coda results. NEVER say "typically" or "generally" — that means you're guessing.
+
+━━━ TICKET ROUTING ━━━
+Application/case → collect (name on case, date applied, email on case) → zakat_distribution → Shahnaz
+Donation/payment → collect (date, type, method, email if online, amount) → donor_management → Farooq
+Unanswered Zakat questions → zakat_education → Ahmed
+Finance/receipts → finance → Misturah
+Everything else → general → Munir
+Contact preference: ask email or mobile. If mobile → ask for number → add to ticket.
+
+Ticket success → confirm warmly, name the assignee, give ticket number.
+Ticket failure → "Please contact us at 1300 663 729 or nzf.org.au/contact/"
+
+━━━ AMBIGUOUS QUESTIONS ━━━
+If unclear whether the visitor means a general Zakat question, their own application, or a donation they made → ask:
+"Just so I can help you best — is your question:
+1. A general question about Zakat rules?
+2. About an application you've submitted to NZF?
+3. About a donation or payment you've made to NZF?"
+
+━━━ TONE ━━━
+Warm, human, courteous. Islamic not-for-profit — be respectful always. SHORT replies (2-4 sentences). One idea per message. Plain language.`;
+}
+
+// ─── CORS ──────────────────────────────────────────────────────────────────
+const CORS = {
+  'Access-Control-Allow-Origin':  '*',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Content-Type':                 'application/json',
+};
+
+// ─── Handler ───────────────────────────────────────────────────────────────
+exports.handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: CORS, body: '' };
+  if (event.httpMethod !== 'POST')    return { statusCode: 405, headers: CORS, body: 'Method Not Allowed' };
+
+  try {
+    const { messages, visitorName, visitorEmail } = JSON.parse(event.body);
+
+    // Get last user message for Coda search
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+    const userQuery   = typeof lastUserMsg?.content === 'string'
+      ? lastUserMsg.content
+      : lastUserMsg?.content?.[0]?.text || '';
+
+    // Step 1: Search Coda immediately (cached after first call — near instant)
+    let codaResults = [];
+    try {
+      const rows = await getCodaRows();
+      codaResults = searchCodaRows(userQuery, rows);
+      console.log(`[Coda] "${userQuery.slice(0,60)}" → ${codaResults.length} results`);
+    } catch (err) {
+      console.error('[Coda error]', err.message);
+    }
+
+    // Step 2: Build system prompt with Coda results baked in
+    const systemPrompt = buildSystemPrompt(visitorName, visitorEmail, codaResults);
+
+    const anthropic     = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+    let claudeMessages  = messages.slice(-20);
+
+    // Step 3: Single Claude call — no tool_use needed for Coda (already in context)
+    let response = await anthropic.messages.create({
+      model:      'claude-haiku-4-5-20251001',
+      max_tokens: 700,
+      system:     systemPrompt,
+      tools:      TOOLS,
+      messages:   claudeMessages,
+    });
+
+    // Step 4: Tool loop — only fires for website search or ticket creation
+    let iterations = 0;
+    while (response.stop_reason === 'tool_use' && iterations < 4) {
+      iterations++;
+      const toolUseBlocks = response.content.filter(b => b.type === 'tool_use');
+      const toolResults   = await Promise.all(toolUseBlocks.map(async (toolUse) => {
+        let result;
+        try {
+          if      (toolUse.name === 'search_nzf_website')      result = await searchNZFWebsite(toolUse.input.query);
+          else if (toolUse.name === 'create_zoho_desk_ticket')  result = await createZohoDeskTicket(toolUse.input);
+          else result = { error: `Unknown tool: ${toolUse.name}` };
+        } catch (err) {
+          console.error(`[Tool error: ${toolUse.name}]`, err.message);
+          result = { error: err.message };
+        }
+        return { type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(result) };
+      }));
+
+      claudeMessages = [
+        ...claudeMessages,
+        { role: 'assistant', content: response.content },
+        { role: 'user',      content: toolResults },
+      ];
+
+      response = await anthropic.messages.create({
+        model:      'claude-haiku-4-5-20251001',
+        max_tokens: 700,
+        system:     systemPrompt,
+        tools:      TOOLS,
+        messages:   claudeMessages,
+      });
+    }
+
+    const textBlock = response.content.find(b => b.type === 'text');
+    return {
+      statusCode: 200,
+      headers:    CORS,
+      body:       JSON.stringify({ reply: textBlock?.text || '' }),
+    };
+
+  } catch (err) {
+    console.error('[Handler error]', err);
+    return {
+      statusCode: 500,
+      headers:    CORS,
+      body:       JSON.stringify({ error: 'Something went wrong. Please try again.' }),
+    };
+  }
+};
