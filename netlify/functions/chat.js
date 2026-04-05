@@ -189,34 +189,91 @@ async function createZohoDeskTicket(input, transcript) {
   const agentMap   = { zakat_distribution: AGENT.shahnaz, zakat_education: AGENT.ahmed, donor_management: AGENT.farooq, finance: AGENT.misturah, general: AGENT.munir };
   const assigneeId = agentMap[department] || AGENT.munir;
 
-  let desc = description + '\n\n';
+  // ── Helper: escape special HTML chars ──────────────────────────────────
+  const esc = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  // ── Build the HTML description ────────────────────────────────────────
+  const section = (title, rows) => `
+    <h3 style="margin:18px 0 6px;font-size:13px;font-weight:700;color:#333;border-bottom:2px solid #BE1E2D;padding-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">${title}</h3>
+    <table style="border-collapse:collapse;width:100%;font-size:13px;">
+      ${rows.filter(Boolean).map(([k,v]) => `
+        <tr>
+          <td style="padding:5px 10px 5px 0;font-weight:600;color:#555;white-space:nowrap;vertical-align:top;width:160px;">${esc(k)}</td>
+          <td style="padding:5px 0;color:#222;">${esc(v)}</td>
+        </tr>`).join('')}
+    </table>`;
+
+  const transcriptRow = (role, text) => {
+    const isVisitor = role === 'Visitor';
+    const bg    = isVisitor ? '#f0f7ff' : '#f9f9f9';
+    const label = isVisitor ? '#1a73e8' : '#BE1E2D';
+    return `<tr>
+      <td style="padding:6px 10px 6px 0;font-weight:700;color:${label};white-space:nowrap;vertical-align:top;font-size:12px;width:60px;">${role}</td>
+      <td style="padding:6px 10px;background:${bg};border-radius:4px;font-size:13px;color:#222;border-left:3px solid ${label};">${esc(text)}</td>
+    </tr><tr><td colspan="2" style="padding:2px 0;"></td></tr>`;
+  };
+
+  let desc = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:720px;">`;
+
+  // ── Visitor query ──────────────────────────────────────────────────────
+  desc += section('Visitor Query', [['Query', description]]);
+
+  // ── Application details ────────────────────────────────────────────────
   if (department === 'zakat_distribution' && (caseNameOnFile || dateApplied || emailOnCase)) {
-    desc += '── Application Details ──\n';
-    if (caseNameOnFile) desc += `Name on case: ${caseNameOnFile}\n`;
-    if (dateApplied)    desc += `Date applied: ${dateApplied}\n`;
-    if (emailOnCase)    desc += `Email on case: ${emailOnCase}\n`;
+    desc += section('Application Details', [
+      caseNameOnFile && ['Name on case',  caseNameOnFile],
+      dateApplied    && ['Date applied',  dateApplied],
+      emailOnCase    && ['Email on case', emailOnCase],
+    ]);
   }
+
+  // ── Donation details ───────────────────────────────────────────────────
   if (department === 'donor_management' && (donationDate || donationType || paymentMethod || emailUsedOnline || amountPaid)) {
-    desc += '── Donation Details ──\n';
-    if (donationDate)    desc += `Date of payment: ${donationDate}\n`;
-    if (donationType)    desc += `Type of donation: ${donationType}\n`;
-    if (paymentMethod)   desc += `Payment method: ${paymentMethod}\n`;
-    if (emailUsedOnline) desc += `Email used online: ${emailUsedOnline}\n`;
-    if (amountPaid)      desc += `Amount paid: ${amountPaid}\n`;
+    desc += section('Donation Details', [
+      donationDate    && ['Date of payment',  donationDate],
+      donationType    && ['Type of donation', donationType],
+      paymentMethod   && ['Payment method',   paymentMethod],
+      emailUsedOnline && ['Email used',       emailUsedOnline],
+      amountPaid      && ['Amount paid',      amountPaid],
+    ]);
   }
-  if (preferredContact) desc += `\n── Contact Preference ──\nPreferred contact: ${preferredContact}\n`;
-  if (phone)            desc += `Mobile: ${phone}\n`;
-  desc += '\n── Raised via ──\nNZF Website Chat Agent';
 
-  // Append conversation summary if provided
+  // ── Contact preference ─────────────────────────────────────────────────
+  if (preferredContact || phone) {
+    desc += section('Contact Preference', [
+      preferredContact && ['Preferred contact', preferredContact],
+      phone            && ['Mobile',            phone],
+    ]);
+  }
+
+  // ── Raised via ─────────────────────────────────────────────────────────
+  desc += section('Source', [['Raised via', 'NZF Website Chat Agent']]);
+
+  // ── Conversation summary ───────────────────────────────────────────────
   if (conversation_summary) {
-    desc += `\n\n── Conversation Summary ──\n${conversation_summary}`;
+    desc += `
+    <h3 style="margin:18px 0 6px;font-size:13px;font-weight:700;color:#333;border-bottom:2px solid #BE1E2D;padding-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">Conversation Summary</h3>
+    <p style="font-size:13px;color:#222;line-height:1.6;background:#fffbf0;padding:10px 14px;border-left:3px solid #f0a500;border-radius:4px;">${esc(conversation_summary)}</p>`;
   }
 
-  // Append full transcript if provided by the handler
+  // ── Full transcript ────────────────────────────────────────────────────
   if (transcript && transcript.length > 0) {
-    desc += `\n\n── Full Conversation Transcript ──\n${transcript}`;
+    desc += `
+    <h3 style="margin:18px 0 6px;font-size:13px;font-weight:700;color:#333;border-bottom:2px solid #BE1E2D;padding-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">Full Conversation Transcript</h3>
+    <table style="border-collapse:collapse;width:100%;">`;
+    const lines = transcript.split('\n').filter(l => l.trim());
+    for (const line of lines) {
+      const colonIdx = line.indexOf(':');
+      if (colonIdx > 0) {
+        const role = line.slice(0, colonIdx).trim();
+        const text = line.slice(colonIdx + 1).trim();
+        if (role && text) desc += transcriptRow(role, text);
+      }
+    }
+    desc += `</table>`;
   }
+
+  desc += `</div>`;
 
   const parts    = (name || '').trim().split(/\s+/);
   const lastName = parts.length > 1 ? parts.slice(1).join(' ') : parts[0] || 'Visitor';
@@ -224,7 +281,7 @@ async function createZohoDeskTicket(input, transcript) {
   const res = await fetch('https://desk.zoho.com/api/v1/tickets', {
     method: 'POST',
     headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json', orgId: ZOHO_ORG_ID },
-    body: JSON.stringify({ subject, description: desc.trim(), departmentId: deptId, assigneeId, status: 'Open', channel: 'Web', phone: phone || undefined, contact: { lastName, email } }),
+    body: JSON.stringify({ subject: `[TEST] ${subject}`, description: desc, departmentId: deptId, assigneeId, status: 'Open', channel: 'Web', phone: phone || undefined, contact: { lastName, email } }),
   });
   const data = await res.json();
   console.log('[ZohoDesk] Response:', JSON.stringify(data).slice(0, 300));
