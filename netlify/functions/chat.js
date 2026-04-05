@@ -159,7 +159,14 @@ async function searchNZFWebsite(query) {
 }
 
 // ─── Zoho OAuth ────────────────────────────────────────────────────────────
+// Cache Zoho access token — they last 1 hour, no need to refresh on every request
+let zohoTokenCache  = null;
+let zohoTokenExpiry = 0;
+
 async function getZohoAccessToken() {
+  const now = Date.now();
+  if (zohoTokenCache && now < zohoTokenExpiry) return zohoTokenCache;
+
   const res = await fetch('https://accounts.zoho.com/oauth/v2/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -172,7 +179,11 @@ async function getZohoAccessToken() {
   });
   const data = await res.json();
   if (!data.access_token) throw new Error(`Zoho token refresh failed: ${JSON.stringify(data)}`);
-  return data.access_token;
+
+  zohoTokenCache  = data.access_token;
+  zohoTokenExpiry = now + 55 * 60 * 1000; // 55 min (token lasts 60, refresh at 55)
+  console.log('[Zoho] Token refreshed');
+  return zohoTokenCache;
 }
 
 // ─── Create Zoho Desk ticket ───────────────────────────────────────────────
@@ -229,7 +240,7 @@ async function createZohoDeskTicket(input, transcript) {
     lines.push(...transcriptLines);
   }
 
-  const desc = lines.join('\n');
+  const desc = lines.join('<br>');
 
   const parts    = (name || '').trim().split(/\s+/);
   const lastName = parts.length > 1 ? parts.slice(1).join(' ') : parts[0] || 'Visitor';
