@@ -136,7 +136,7 @@ async function searchNZFWebsite(query) {
     try {
       const res = await fetch(page.url, {
         headers: { 'User-Agent': 'NZFChatAgent/1.0' },
-        signal: AbortSignal.timeout(6000),
+        signal: AbortSignal.timeout(4000),
       });
       if (!res.ok) return null;
       const html = await res.text();
@@ -313,6 +313,10 @@ When you have all required details, call create_zoho_desk_ticket with:
 - The conversation_summary field: 3-5 sentence summary of the full conversation
 The handler will automatically append the full transcript — you do not need to include it.
 
+OFF-TOPIC QUESTIONS:
+If the question is clearly unrelated to Zakat, Islamic finance, NZF, donations, applications, or anything we do — for example questions about salaries, politics, cooking, sports, other organisations — output immediately: __NZF_NO_DATA__
+Do NOT call any tools. Do NOT try to find a partial answer. Just output: __NZF_NO_DATA__
+
 NO DATA FALLBACK:
 If Coda is empty AND search_nzf_website returns nothing → output EXACTLY: __NZF_NO_DATA__
 Do NOT apologise. Do NOT explain. Do NOT offer alternatives. Just output: __NZF_NO_DATA__
@@ -407,7 +411,7 @@ exports.handler = async (event) => {
     let iterations = 0;
     let ticketOutcome = null; // Track ticket result outside Claude's interpretation
 
-    while (response.stop_reason === 'tool_use' && iterations < 4) {
+    while (response.stop_reason === 'tool_use' && iterations < 2) {
       iterations++;
       const toolUseBlocks = response.content.filter(b => b.type === 'tool_use');
       const toolResults   = await Promise.all(toolUseBlocks.map(async (toolUse) => {
