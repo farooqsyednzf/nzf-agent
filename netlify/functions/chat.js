@@ -189,91 +189,47 @@ async function createZohoDeskTicket(input, transcript) {
   const agentMap   = { zakat_distribution: AGENT.shahnaz, zakat_education: AGENT.ahmed, donor_management: AGENT.farooq, finance: AGENT.misturah, general: AGENT.munir };
   const assigneeId = agentMap[department] || AGENT.munir;
 
-  // ── Helper: escape special HTML chars ──────────────────────────────────
-  const esc = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // ── Build plain-text description (fast, small payload) ────────────────
+  const lines = [];
 
-  // ── Build the HTML description ────────────────────────────────────────
-  const section = (title, rows) => `
-    <h3 style="margin:18px 0 6px;font-size:13px;font-weight:700;color:#333;border-bottom:2px solid #BE1E2D;padding-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">${title}</h3>
-    <table style="border-collapse:collapse;width:100%;font-size:13px;">
-      ${rows.filter(Boolean).map(([k,v]) => `
-        <tr>
-          <td style="padding:5px 10px 5px 0;font-weight:600;color:#555;white-space:nowrap;vertical-align:top;width:160px;">${esc(k)}</td>
-          <td style="padding:5px 0;color:#222;">${esc(v)}</td>
-        </tr>`).join('')}
-    </table>`;
+  lines.push(`Query: ${description}`);
+  lines.push(`Source: NZF Website Chat Agent`);
 
-  const transcriptRow = (role, text) => {
-    const isVisitor = role === 'Visitor';
-    const bg    = isVisitor ? '#f0f7ff' : '#f9f9f9';
-    const label = isVisitor ? '#1a73e8' : '#BE1E2D';
-    return `<tr>
-      <td style="padding:6px 10px 6px 0;font-weight:700;color:${label};white-space:nowrap;vertical-align:top;font-size:12px;width:60px;">${role}</td>
-      <td style="padding:6px 10px;background:${bg};border-radius:4px;font-size:13px;color:#222;border-left:3px solid ${label};">${esc(text)}</td>
-    </tr><tr><td colspan="2" style="padding:2px 0;"></td></tr>`;
-  };
+  if (preferredContact) lines.push(`Preferred contact: ${preferredContact}`);
+  if (phone)            lines.push(`Mobile: ${phone}`);
 
-  let desc = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:720px;">`;
-
-  // ── Visitor query ──────────────────────────────────────────────────────
-  desc += section('Visitor Query', [['Query', description]]);
-
-  // ── Application details ────────────────────────────────────────────────
   if (department === 'zakat_distribution' && (caseNameOnFile || dateApplied || emailOnCase)) {
-    desc += section('Application Details', [
-      caseNameOnFile && ['Name on case',  caseNameOnFile],
-      dateApplied    && ['Date applied',  dateApplied],
-      emailOnCase    && ['Email on case', emailOnCase],
-    ]);
+    lines.push('');
+    lines.push('-- Application Details --');
+    if (caseNameOnFile) lines.push(`Name on case: ${caseNameOnFile}`);
+    if (dateApplied)    lines.push(`Date applied: ${dateApplied}`);
+    if (emailOnCase)    lines.push(`Email on case: ${emailOnCase}`);
   }
 
-  // ── Donation details ───────────────────────────────────────────────────
   if (department === 'donor_management' && (donationDate || donationType || paymentMethod || emailUsedOnline || amountPaid)) {
-    desc += section('Donation Details', [
-      donationDate    && ['Date of payment',  donationDate],
-      donationType    && ['Type of donation', donationType],
-      paymentMethod   && ['Payment method',   paymentMethod],
-      emailUsedOnline && ['Email used',       emailUsedOnline],
-      amountPaid      && ['Amount paid',      amountPaid],
-    ]);
+    lines.push('');
+    lines.push('-- Donation Details --');
+    if (donationDate)    lines.push(`Date: ${donationDate}`);
+    if (donationType)    lines.push(`Type: ${donationType}`);
+    if (paymentMethod)   lines.push(`Method: ${paymentMethod}`);
+    if (emailUsedOnline) lines.push(`Email used: ${emailUsedOnline}`);
+    if (amountPaid)      lines.push(`Amount: ${amountPaid}`);
   }
 
-  // ── Contact preference ─────────────────────────────────────────────────
-  if (preferredContact || phone) {
-    desc += section('Contact Preference', [
-      preferredContact && ['Preferred contact', preferredContact],
-      phone            && ['Mobile',            phone],
-    ]);
-  }
-
-  // ── Raised via ─────────────────────────────────────────────────────────
-  desc += section('Source', [['Raised via', 'NZF Website Chat Agent']]);
-
-  // ── Conversation summary ───────────────────────────────────────────────
   if (conversation_summary) {
-    desc += `
-    <h3 style="margin:18px 0 6px;font-size:13px;font-weight:700;color:#333;border-bottom:2px solid #BE1E2D;padding-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">Conversation Summary</h3>
-    <p style="font-size:13px;color:#222;line-height:1.6;background:#fffbf0;padding:10px 14px;border-left:3px solid #f0a500;border-radius:4px;">${esc(conversation_summary)}</p>`;
+    lines.push('');
+    lines.push('-- Summary --');
+    lines.push(conversation_summary);
   }
 
-  // ── Full transcript ────────────────────────────────────────────────────
   if (transcript && transcript.length > 0) {
-    desc += `
-    <h3 style="margin:18px 0 6px;font-size:13px;font-weight:700;color:#333;border-bottom:2px solid #BE1E2D;padding-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">Full Conversation Transcript</h3>
-    <table style="border-collapse:collapse;width:100%;">`;
-    const lines = transcript.split('\n').filter(l => l.trim());
-    for (const line of lines) {
-      const colonIdx = line.indexOf(':');
-      if (colonIdx > 0) {
-        const role = line.slice(0, colonIdx).trim();
-        const text = line.slice(colonIdx + 1).trim();
-        if (role && text) desc += transcriptRow(role, text);
-      }
-    }
-    desc += `</table>`;
+    const transcriptLines = transcript.split('\n').filter(l => l.trim());
+    lines.push('');
+    lines.push('-- Transcript --');
+    lines.push(...transcriptLines);
   }
 
-  desc += `</div>`;
+  const desc = lines.join('\n');
 
   const parts    = (name || '').trim().split(/\s+/);
   const lastName = parts.length > 1 ? parts.slice(1).join(' ') : parts[0] || 'Visitor';
