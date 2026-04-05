@@ -281,34 +281,40 @@ async function createZohoDeskTicket(input, transcript) {
     }
   };
 
-  // ── Attempt 1 ─────────────────────────────────────────────────────────
+  // ── Create ticket ────────────────────────────────────────────────────
   let data = await postTicket();
-  console.log('[ZohoDesk] Attempt 1:', JSON.stringify(data).slice(0, 200));
+  console.log('[ZohoDesk] Create response:', JSON.stringify(data).slice(0, 200));
 
-  if (data.id) {
-    const verified = await verifyTicket(data.id);
-    if (verified) {
-      console.log('[ZohoDesk] Ticket verified ✓ #' + data.ticketNumber);
-      return { success: true, ticketId: data.id, ticketNumber: data.ticketNumber };
-    }
-    console.warn('[ZohoDesk] Ticket not found after creation — retrying...');
-  }
-
-  // ── Attempt 2 (retry) ─────────────────────────────────────────────────
-  await new Promise(r => setTimeout(r, 1500)); // Brief pause before retry
-  data = await postTicket();
-  console.log('[ZohoDesk] Attempt 2:', JSON.stringify(data).slice(0, 200));
-
-  if (data.id) {
-    const verified = await verifyTicket(data.id);
-    if (verified) {
-      console.log('[ZohoDesk] Ticket verified on retry ✓ #' + data.ticketNumber);
-      return { success: true, ticketId: data.id, ticketNumber: data.ticketNumber };
+  if (!data.id) {
+    // Creation failed outright — retry once after a short pause
+    console.warn('[ZohoDesk] No ID returned — retrying creation in 2s...');
+    await new Promise(r => setTimeout(r, 2000));
+    data = await postTicket();
+    console.log('[ZohoDesk] Retry response:', JSON.stringify(data).slice(0, 200));
+    if (!data.id) {
+      return { success: false, error: data.message || 'Ticket creation returned no ID' };
     }
   }
 
-  console.error('[ZohoDesk] Ticket creation failed after 2 attempts');
-  return { success: false, error: data.message || 'Ticket could not be verified after 2 attempts' };
+  // ── Verify ticket exists ─────────────────────────────────────────────
+  // Zoho can have a brief propagation delay between write and read.
+  // Wait 800ms then try up to 3 times before concluding it failed.
+  await new Promise(r => setTimeout(r, 800));
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const verified = await verifyTicket(data.id);
+    if (verified) {
+      console.log(`[ZohoDesk] Ticket verified ✓ #${data.ticketNumber} (attempt ${attempt})`);
+      return { success: true, ticketId: data.id, ticketNumber: data.ticketNumber };
+    }
+    console.warn(`[ZohoDesk] Verification attempt ${attempt} failed — waiting...`);
+    await new Promise(r => setTimeout(r, 1000 * attempt)); // 1s, 2s, 3s
+  }
+
+  // Verification failed 3 times but we DO have an ID — treat as success
+  // to avoid incorrectly telling the visitor it failed when it was created.
+  console.warn('[ZohoDesk] Could not verify but ID exists — returning success for #' + data.ticketNumber);
+  return { success: true, ticketId: data.id, ticketNumber: data.ticketNumber };
 }
 
 // ─── Tools (website search + ticket only — Coda is pre-fetched) ────────────
