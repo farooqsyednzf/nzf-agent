@@ -526,8 +526,16 @@
     setTyping(true);
     setInputEnabled(false);
 
+    // Show "still working" message if response takes more than 10 seconds
+    let slowMessageShown = false;
+    const slowTimer = setTimeout(() => {
+      if (isTyping) {
+        slowMessageShown = true;
+        appendMessage('agent', "This is taking a little longer than usual — I'm still working on it. Please bear with me for a moment. 🙏");
+      }
+    }, 10000);
+
     try {
-      // Keep last 10 turns max so long chats don't slow down or timeout
       const trimmedHistory = chatHistory.slice(-20);
 
       const res = await fetch(API_URL, {
@@ -540,13 +548,19 @@
         }),
       });
 
+      clearTimeout(slowTimer);
       const data = await res.json();
       const reply = data.reply || data.error || 'Sorry, something went wrong. Please try again.';
       chatHistory.push({ role: 'assistant', content: reply });
       appendMessage('agent', reply);
 
     } catch (err) {
-      appendMessage('agent', 'Sorry, I\'m having trouble connecting right now. Please try again in a moment.');
+      clearTimeout(slowTimer);
+      if (!slowMessageShown) {
+        appendMessage('agent', 'Sorry, I\'m having trouble connecting right now. Please try again in a moment.');
+      } else {
+        appendMessage('agent', 'I\'m sorry, that took too long to complete. Please try again, or contact us at **1300 663 729** or **nzf.org.au/contact/**');
+      }
     } finally {
       isTyping = false;
       setTyping(false);
