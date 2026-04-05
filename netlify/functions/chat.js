@@ -10,6 +10,11 @@ const ZOHO_REFRESH_TOKEN = process.env.ZOHO_REFRESH_TOKEN;
 const ZOHO_ORG_ID        = '914791857';
 const ANTHROPIC_API_KEY  = process.env.ANTHROPIC_API_KEY;
 
+// Sentinel string Claude outputs when it has no real data to work with.
+// The handler intercepts this and returns a hardcoded error — Claude never composes the error message.
+const NO_DATA_SENTINEL   = '__NZF_NO_DATA__';
+const NO_DATA_RESPONSE   = "I'm sorry, I wasn't able to retrieve information to answer your question right now. Please try again in a moment, or contact us directly at **1300 663 729** or **nzf.org.au/contact/** and our team will be happy to help. Jazakallah khair for your patience.";
+
 // ─── Department & Agent IDs ────────────────────────────────────────────────
 const DEPT = {
   zakat_distribution: '1253395000000435085',
@@ -171,12 +176,12 @@ async function getZohoAccessToken() {
 }
 
 // ─── Create Zoho Desk ticket ───────────────────────────────────────────────
-async function createZohoDeskTicket(input) {
+async function createZohoDeskTicket(input, transcript) {
   const {
     name, email, subject, description, department,
     caseNameOnFile, dateApplied, emailOnCase,
     donationDate, donationType, paymentMethod, emailUsedOnline, amountPaid,
-    phone, preferredContact,
+    phone, preferredContact, conversation_summary,
   } = input;
 
   const token      = await getZohoAccessToken();
@@ -202,6 +207,16 @@ async function createZohoDeskTicket(input) {
   if (preferredContact) desc += `\n── Contact Preference ──\nPreferred contact: ${preferredContact}\n`;
   if (phone)            desc += `Mobile: ${phone}\n`;
   desc += '\n── Raised via ──\nNZF Website Chat Agent';
+
+  // Append conversation summary if provided
+  if (conversation_summary) {
+    desc += `\n\n── Conversation Summary ──\n${conversation_summary}`;
+  }
+
+  // Append full transcript if provided by the handler
+  if (transcript && transcript.length > 0) {
+    desc += `\n\n── Full Conversation Transcript ──\n${transcript}`;
+  }
 
   const parts    = (name || '').trim().split(/\s+/);
   const lastName = parts.length > 1 ? parts.slice(1).join(' ') : parts[0] || 'Visitor';
@@ -237,6 +252,7 @@ const TOOLS = [
         donationDate: { type: 'string' }, donationType: { type: 'string' }, paymentMethod: { type: 'string' },
         emailUsedOnline: { type: 'string' }, amountPaid: { type: 'string' },
         preferredContact: { type: 'string', enum: ['email','mobile'] }, phone: { type: 'string' },
+        conversation_summary: { type: 'string', description: '3-5 sentence summary of the full conversation — what the visitor asked, what was answered, and what they need from the team.' },
       },
       required: ['name','email','subject','description','department'],
     },
@@ -255,12 +271,38 @@ function buildSystemPrompt(visitorName, visitorEmail, codaResults) {
 
   return `You are the NZF (National Zakat Foundation Australia) website assistant. You represent NZF — always say "we", "our", "us". Greet new visitors with "Assalamu Alaikum".
 ${identity}${codaSection}
-━━━ RESPONSE RULES ━━━
-1. If Coda results are relevant → answer from them directly. SHORT (2-4 sentences). Then ask "Would you like more detail or related resources on our website?"
-2. If visitor says yes, asks a follow-up, or asks "where can I find more" → immediately call search_nzf_website for the same topic and share what you find including the URL.
-3. If Coda is empty and it's an NZF organisational question (apply, programs, pay, contact) → call search_nzf_website immediately.
-4. If it's a personal query (their own application/case or donation) → collect info, create ticket.
-5. If nothing found anywhere → apologise, offer to raise with team, ask email or mobile preference, create ticket.
+━━━ STRICT 5-STEP RESPONSE SEQUENCE — ALWAYS FOLLOW THIS ORDER ━━━
+
+STEP 1 — CHECK CODA (always first)
+Coda results are already in your context above. If they are relevant to the question, use them as your primary answer.
+- Present the Coda answer in 2-4 sentences.
+- Then ask: "Would you like more information or relevant links from our website?"
+
+STEP 2 — CHECK WEBSITE (only if Coda has no answer, or visitor asks for more)
+- If Coda has no results → call search_nzf_website immediately and share what you find.
+- If Coda had an answer AND visitor wants more → call search_nzf_website and provide the relevant URL(s).
+- Always present URLs as plain links (the chat makes them clickable automatically).
+
+STEP 3 — OFFER TEAM CONTACT
+After answering (whether from Coda or website), always ask:
+"Would you like one of our team members to get in touch with you about this?"
+If yes → go to Step 4.
+If no → close warmly with: "You're always welcome to reach us at 1300 663 729 or nzf.org.au/contact/"
+
+STEP 4 — COLLECT DETAILS FOR TICKET
+Collect the visitor's contact preference (email or mobile). If mobile, ask for their number.
+Also collect any query-specific details (see TICKET ROUTING below).
+Ask 2 questions at a time maximum — keep it conversational.
+
+STEP 5 — CREATE TICKET (with transcript and summary)
+When you have all required details, call create_zoho_desk_ticket with:
+- A concise summary of the visitor's query and what was discussed (field: description)
+- The conversation_summary field: 3-5 sentence summary of the full conversation
+The handler will automatically append the full transcript — you do not need to include it.
+
+NO DATA FALLBACK:
+If Coda is empty AND search_nzf_website returns nothing → output EXACTLY: __NZF_NO_DATA__
+Do NOT apologise. Do NOT explain. Do NOT offer alternatives. Just output: __NZF_NO_DATA__
 
 ━━━ WHEN TO OFFER A TICKET ━━━
 Always offer to raise a ticket and connect the visitor with a team member when:
@@ -276,6 +318,8 @@ If they say no → close warmly with contact details: 1300 663 729 or nzf.org.au
 NEVER redirect someone to "contact a local mosque" or external parties without first offering to raise a ticket with our own team.
 
 NEVER answer from your own knowledge. NEVER contradict Coda results. NEVER say "typically" or "generally" — that means you're guessing.
+NEVER compose a Zakat or NZF answer without data from Coda results or the website tool. If you have no data, output: __NZF_NO_DATA__
+NEVER invent ticket numbers, ticket confirmations, or any factual details not returned by a tool.
 
 ━━━ TICKET ROUTING ━━━
 Application/case → collect (name on case, date applied, email on case) → zakat_distribution → Shahnaz
@@ -348,6 +392,8 @@ exports.handler = async (event) => {
 
     // Step 4: Tool loop — only fires for website search or ticket creation
     let iterations = 0;
+    let ticketOutcome = null; // Track ticket result outside Claude's interpretation
+
     while (response.stop_reason === 'tool_use' && iterations < 4) {
       iterations++;
       const toolUseBlocks = response.content.filter(b => b.type === 'tool_use');
@@ -355,11 +401,33 @@ exports.handler = async (event) => {
         let result;
         try {
           if      (toolUse.name === 'search_nzf_website')      result = await searchNZFWebsite(toolUse.input.query);
-          else if (toolUse.name === 'create_zoho_desk_ticket')  result = await createZohoDeskTicket(toolUse.input);
+          else if (toolUse.name === 'create_zoho_desk_ticket') {
+            // Build a clean plain-text transcript from the conversation history
+            const transcript = messages
+              .filter(m => m.role === 'user' || m.role === 'assistant')
+              .map(m => {
+                const role  = m.role === 'user' ? 'Visitor' : 'Agent';
+                const text  = typeof m.content === 'string'
+                  ? m.content
+                  : Array.isArray(m.content)
+                    ? m.content.filter(b => b.type === 'text').map(b => b.text).join(' ')
+                    : '';
+                return text.trim() ? `${role}: ${text.trim()}` : null;
+              })
+              .filter(Boolean)
+              .join('\n');
+
+            result = await createZohoDeskTicket(toolUse.input, transcript);
+            ticketOutcome = result;
+            console.log('[Ticket outcome]', JSON.stringify(result));
+          }
           else result = { error: `Unknown tool: ${toolUse.name}` };
         } catch (err) {
           console.error(`[Tool error: ${toolUse.name}]`, err.message);
           result = { error: err.message };
+          if (toolUse.name === 'create_zoho_desk_ticket') {
+            ticketOutcome = { success: false, error: err.message };
+          }
         }
         return { type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(result) };
       }));
@@ -379,11 +447,46 @@ exports.handler = async (event) => {
       });
     }
 
+    // If a ticket was attempted, verify Claude's response reflects reality.
+    // If the ticket failed, override with a hardcoded response — don't trust Haiku to self-report failure.
+    if (ticketOutcome !== null && !ticketOutcome.success) {
+      console.error('[Ticket failed] Overriding Claude response with failure message. Error:', ticketOutcome.error);
+      return {
+        statusCode: 200,
+        headers:    CORS,
+        body:       JSON.stringify({
+          reply: "I'm sorry, something went wrong on our end and I wasn't able to raise that ticket. Please contact us directly at **1300 663 729** or visit **nzf.org.au/contact/** and our team will be happy to help you.",
+        }),
+      };
+    }
+
+    // If ticket succeeded, make sure Claude's response includes the real ticket number
+    if (ticketOutcome !== null && ticketOutcome.success) {
+      const textBlock = response.content.find(b => b.type === 'text');
+      let reply = textBlock?.text || '';
+      // If Claude invented a different ticket number, replace it with the real one
+      reply = reply.replace(/#\d+/g, `#${ticketOutcome.ticketNumber}`);
+      return {
+        statusCode: 200,
+        headers:    CORS,
+        body:       JSON.stringify({ reply }),
+      };
+    }
+
     const textBlock = response.content.find(b => b.type === 'text');
+    let finalReply = textBlock?.text || '';
+
+    // If Claude output the no-data sentinel, replace with hardcoded error.
+    // This ensures Claude never composes an error message from its own knowledge.
+    if (finalReply.includes(NO_DATA_SENTINEL)) {
+      console.log('[No data] Sentinel detected — returning hardcoded error response');
+      finalReply = NO_DATA_RESPONSE;
+    }
+
     return {
       statusCode: 200,
       headers:    CORS,
-      body:       JSON.stringify({ reply: textBlock?.text || '' }),
+      body:       JSON.stringify({ reply: finalReply }),
     };
 
   } catch (err) {
