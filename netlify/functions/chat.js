@@ -245,15 +245,70 @@ async function createZohoDeskTicket(input, transcript) {
   const parts    = (name || '').trim().split(/\s+/);
   const lastName = parts.length > 1 ? parts.slice(1).join(' ') : parts[0] || 'Visitor';
 
-  const res = await fetch('https://desk.zoho.com/api/v1/tickets', {
-    method: 'POST',
-    headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json', orgId: ZOHO_ORG_ID },
-    body: JSON.stringify({ subject: `[TEST] ${subject}`, description: desc, departmentId: deptId, assigneeId, status: 'Open', channel: 'Web', phone: phone || undefined, contact: { lastName, email } }),
-  });
-  const data = await res.json();
-  console.log('[ZohoDesk] Response:', JSON.stringify(data).slice(0, 300));
-  if (data.id) return { success: true, ticketId: data.id, ticketNumber: data.ticketNumber };
-  return { success: false, error: data.message || JSON.stringify(data) };
+  const ticketPayload = {
+    subject: `[TEST] ${subject}`,
+    description: desc,
+    departmentId: deptId,
+    assigneeId,
+    status: 'Open',
+    channel: 'Web',
+    phone: phone || undefined,
+    contact: { lastName, email },
+  };
+
+  // ── Helper: POST ticket to Zoho Desk ─────────────────────────────────
+  const postTicket = async () => {
+    const r = await fetch('https://desk.zoho.com/api/v1/tickets', {
+      method: 'POST',
+      headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json', orgId: ZOHO_ORG_ID },
+      body: JSON.stringify(ticketPayload),
+    });
+    return r.json();
+  };
+
+  // ── Helper: verify ticket exists by fetching it back ─────────────────
+  const verifyTicket = async (ticketId) => {
+    try {
+      const r = await fetch(`https://desk.zoho.com/api/v1/tickets/${ticketId}`, {
+        headers: { Authorization: `Zoho-oauthtoken ${token}`, orgId: ZOHO_ORG_ID },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!r.ok) return false;
+      const d = await r.json();
+      return d.id ? true : false;
+    } catch {
+      return false;
+    }
+  };
+
+  // ── Attempt 1 ─────────────────────────────────────────────────────────
+  let data = await postTicket();
+  console.log('[ZohoDesk] Attempt 1:', JSON.stringify(data).slice(0, 200));
+
+  if (data.id) {
+    const verified = await verifyTicket(data.id);
+    if (verified) {
+      console.log('[ZohoDesk] Ticket verified ✓ #' + data.ticketNumber);
+      return { success: true, ticketId: data.id, ticketNumber: data.ticketNumber };
+    }
+    console.warn('[ZohoDesk] Ticket not found after creation — retrying...');
+  }
+
+  // ── Attempt 2 (retry) ─────────────────────────────────────────────────
+  await new Promise(r => setTimeout(r, 1500)); // Brief pause before retry
+  data = await postTicket();
+  console.log('[ZohoDesk] Attempt 2:', JSON.stringify(data).slice(0, 200));
+
+  if (data.id) {
+    const verified = await verifyTicket(data.id);
+    if (verified) {
+      console.log('[ZohoDesk] Ticket verified on retry ✓ #' + data.ticketNumber);
+      return { success: true, ticketId: data.id, ticketNumber: data.ticketNumber };
+    }
+  }
+
+  console.error('[ZohoDesk] Ticket creation failed after 2 attempts');
+  return { success: false, error: data.message || 'Ticket could not be verified after 2 attempts' };
 }
 
 // ─── Tools (website search + ticket only — Coda is pre-fetched) ────────────
@@ -466,9 +521,11 @@ exports.handler = async (event) => {
               .filter(Boolean)
               .join('\n');
 
+            console.log('[Ticket] Calling Zoho API...');
             result = await createZohoDeskTicket(toolUse.input, transcript);
             ticketOutcome = result;
             console.log('[Ticket outcome]', JSON.stringify(result));
+            console.log('[Ticket] success:', result.success, '| ticketNumber:', result.ticketNumber, '| error:', result.error);
           }
           else result = { error: `Unknown tool: ${toolUse.name}` };
         } catch (err) {
@@ -533,10 +590,16 @@ exports.handler = async (event) => {
     let finalReply = textBlock?.text || '';
 
     // If Claude output the no-data sentinel, replace with hardcoded error.
-    // This ensures Claude never composes an error message from its own knowledge.
     if (finalReply.includes(NO_DATA_SENTINEL)) {
       console.log('[No data] Sentinel detected — returning hardcoded error response');
       finalReply = NO_DATA_RESPONSE;
+    }
+
+    // If Claude mentions a ticket number but no ticket was actually created,
+    // it is hallucinating. Intercept and return a real error.
+    if (ticketOutcome === null && /ticket\s*#?\d+/i.test(finalReply)) {
+      console.error('[Hallucination detected] Claude mentioned a ticket number with no real ticketOutcome. Overriding.');
+      finalReply = "I'm sorry, something went wrong while raising that ticket. Please contact us directly at **1300 663 729** or visit **nzf.org.au/contact/** and our team will be happy to help.";
     }
 
     return {
