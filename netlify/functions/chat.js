@@ -460,6 +460,39 @@ exports.handler = async (event) => {
         return { type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(result) };
       }));
 
+      // If a ticket was just created, return immediately — no second Claude call needed.
+      // This avoids the extra round-trip that was causing timeouts.
+      if (ticketOutcome !== null) {
+        if (ticketOutcome.success) {
+          const input      = toolUseBlocks.find(b => b.name === 'create_zoho_desk_ticket')?.input || {};
+          const assigneeNames = {
+            zakat_distribution: 'Shahnaz',
+            zakat_education:    'Ahmed',
+            donor_management:   'Farooq',
+            finance:            'Misturah',
+            general:            'Munir',
+          };
+          const assignee  = assigneeNames[input.department] || 'a team member';
+          const contact   = input.preferredContact === 'mobile' ? `mobile (${input.phone || 'number provided'})` : `email (${input.email})`;
+          return {
+            statusCode: 200,
+            headers:    CORS,
+            body:       JSON.stringify({
+              reply: `JazakAllah khair! I've raised this with our team.\n\n**Ticket #${ticketOutcome.ticketNumber}** has been created and assigned to **${assignee}**. They'll follow up with you via ${contact} shortly.\n\nIf anything is urgent, you can also reach us directly at **1300 663 729**.`,
+            }),
+          };
+        } else {
+          console.error('[Ticket failed]', ticketOutcome.error);
+          return {
+            statusCode: 200,
+            headers:    CORS,
+            body:       JSON.stringify({
+              reply: "I'm sorry, something went wrong on our end and I wasn't able to raise that ticket. Please contact us directly at **1300 663 729** or visit **nzf.org.au/contact/** and our team will be happy to help.",
+            }),
+          };
+        }
+      }
+
       claudeMessages = [
         ...claudeMessages,
         { role: 'assistant', content: response.content },
@@ -473,32 +506,6 @@ exports.handler = async (event) => {
         tools:      TOOLS,
         messages:   claudeMessages,
       });
-    }
-
-    // If a ticket was attempted, verify Claude's response reflects reality.
-    // If the ticket failed, override with a hardcoded response — don't trust Haiku to self-report failure.
-    if (ticketOutcome !== null && !ticketOutcome.success) {
-      console.error('[Ticket failed] Overriding Claude response with failure message. Error:', ticketOutcome.error);
-      return {
-        statusCode: 200,
-        headers:    CORS,
-        body:       JSON.stringify({
-          reply: "I'm sorry, something went wrong on our end and I wasn't able to raise that ticket. Please contact us directly at **1300 663 729** or visit **nzf.org.au/contact/** and our team will be happy to help you.",
-        }),
-      };
-    }
-
-    // If ticket succeeded, make sure Claude's response includes the real ticket number
-    if (ticketOutcome !== null && ticketOutcome.success) {
-      const textBlock = response.content.find(b => b.type === 'text');
-      let reply = textBlock?.text || '';
-      // If Claude invented a different ticket number, replace it with the real one
-      reply = reply.replace(/#\d+/g, `#${ticketOutcome.ticketNumber}`);
-      return {
-        statusCode: 200,
-        headers:    CORS,
-        body:       JSON.stringify({ reply }),
-      };
     }
 
     const textBlock = response.content.find(b => b.type === 'text');
