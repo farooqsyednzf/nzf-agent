@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>About NZF | National Zakat Foundation Australia</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bree+Serif&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --red: #BE1E2D;
+    --red-light: #fdf3f3;
+    --cream: #faf8f5;
+    --ink: #1c1c1c;
+    --mid: #6b6b6b;
+    --border: #e8e2db;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--cream);
+    color: var(--ink);
+    font-size: 17px;
+    line-height: 1.7;
+  }
+
+  a { text-decoration: none; color: inherit; }
+
+  /* ── NAV ── */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 50;
+    background: rgba(250,248,245,0.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .nav-logo { display: flex; align-items: center; gap: 10px; }
+  .nav-logo img { height: 36px; }
+  .nav-cta {
+    background: var(--red);
+    color: #fff;
+    padding: 9px 22px;
+    border-radius: 50px;
+    font-size: 14px;
+    font-weight: 600;
+    transition: opacity .2s;
+  }
+  .nav-cta:hover { opacity: .85; }
+
+  /* ── HERO ── */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 120px 32px 80px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero-bg {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 80% 40%, rgba(190,30,45,0.08) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 60% at 10% 80%, rgba(190,30,45,0.05) 0%, transparent 60%);
+  }
+  .hero-inner {
+    position: relative;
+    max-width: 800px;
+    margin: 0 auto;
+    text-align: center;
+  }
+  .hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--red-light);
+    border: 1px solid rgba(190,30,45,0.2);
+    color: var(--red);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    padding: 6px 16px;
+    border-radius: 50px;
+    margin-bottom: 28px;
+  }
+  .hero h1 {
+    font-family: 'Bree Serif', serif;
+    font-size: clamp(36px, 6vw, 68px);
+    line-height: 1.1;
+    margin-bottom: 24px;
+    color: var(--ink);
+  }
+  .hero h1 em {
+    color: var(--red);
+    font-style: normal;
+    position: relative;
+    display: inline-block;
+  }
+  .hero h1 em::after {
+    content: '';
+    position: absolute;
+    bottom: 2px;
+    left: 0; right: 0;
+    height: 4px;
+    background: var(--red);
+    opacity: .25;
+    border-radius: 2px;
+  }
+  .hero p {
+    font-size: clamp(16px, 2vw, 20px);
+    color: var(--mid);
+    max-width: 600px;
+    margin: 0 auto 36px;
+  }
+  .hero-actions {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .btn-primary {
+    background: var(--red);
+    color: #fff;
+    padding: 14px 32px;
+    border-radius: 50px;
+    font-weight: 700;
+    font-size: 15px;
+    transition: transform .2s, box-shadow .2s;
+    box-shadow: 0 4px 16px rgba(190,30,45,0.25);
+  }
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(190,30,45,0.35);
+  }
+  .btn-ghost {
+    color: var(--ink);
+    padding: 14px 32px;
+    border-radius: 50px;
+    font-weight: 600;
+    font-size: 15px;
+    border: 2px solid var(--border);
+    transition: border-color .2s, background .2s;
+  }
+  .btn-ghost:hover { border-color: var(--ink); background: rgba(0,0,0,0.03); }
+  .scroll-hint {
+    margin-top: 64px;
+    font-size: 12px;
+    color: #bbb;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .scroll-arrow { animation: bounce 2s infinite; font-size: 18px; }
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(6px); }
+  }
+
+  /* ── SECTIONS ── */
+  section { padding: 90px 32px; }
+  .section-inner { max-width: 900px; margin: 0 auto; }
+  .section-tag {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    color: var(--red);
+    margin-bottom: 12px;
+  }
+  .section-title {
+    font-family: 'Bree Serif', serif;
+    font-size: clamp(26px, 4vw, 42px);
+    line-height: 1.2;
+    margin-bottom: 20px;
+  }
+  .section-body {
+    color: var(--mid);
+    font-size: 16.5px;
+    max-width: 680px;
+  }
+  .section-body p { margin-bottom: 14px; }
+  .section-body p:last-child { margin-bottom: 0; }
+
+  /* ── DIVIDER ── */
+  .divider {
+    max-width: 900px;
+    margin: 0 auto;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ── ZAKAT EXPLAINER ── */
+  .zakat-section { background: var(--ink); color: #fff; }
+  .zakat-section .section-tag { color: #f0a0a0; }
+  .zakat-section .section-title { color: #fff; }
+  .zakat-section .section-body { color: #bbb; }
+  .pillars {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    margin-top: 36px;
+  }
+  .pillar {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 16px 12px;
+    text-align: center;
+    transition: background .2s;
+  }
+  .pillar.active {
+    background: var(--red);
+    border-color: var(--red);
+  }
+  .pillar-num {
+    font-size: 11px;
+    opacity: .5;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+  .pillar-name {
+    font-weight: 600;
+    font-size: 13px;
+    line-height: 1.3;
+  }
+  .pillar.active .pillar-num { opacity: .7; }
+
+  /* ── HOW IT WORKS ── */
+  .how-section { background: #fff; }
+  .steps {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr auto 1fr;
+    gap: 0;
+    align-items: center;
+    margin-top: 48px;
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .step {
+    text-align: center;
+    padding: 0 8px;
+  }
+  .step-icon {
+    width: 72px;
+    height: 72px;
+    background: var(--red-light);
+    border: 2px solid rgba(190,30,45,0.15);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    margin: 0 auto 16px;
+  }
+  .step h3 {
+    font-family: 'Bree Serif', serif;
+    font-size: 16px;
+    margin-bottom: 8px;
+  }
+  .step p { font-size: 13.5px; color: var(--mid); line-height: 1.5; }
+  .step-arrow {
+    font-size: 22px;
+    color: var(--red);
+    opacity: .4;
+    flex-shrink: 0;
+  }
+
+  /* ── STATS ── */
+  .stats-section { background: var(--red); color: #fff; }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 32px;
+    margin-top: 36px;
+    text-align: center;
+  }
+  .stat-number {
+    font-family: 'Bree Serif', serif;
+    font-size: clamp(36px, 5vw, 56px);
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .stat-label { font-size: 14px; opacity: .8; }
+
+  /* ── WHO WE HELP ── */
+  .who-section { background: var(--cream); }
+  .who-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+    margin-top: 40px;
+  }
+  .who-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid var(--border);
+  }
+  .who-icon { font-size: 24px; margin-bottom: 10px; }
+  .who-card h4 {
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 4px;
+  }
+  .who-card p { font-size: 13px; color: var(--mid); line-height: 1.5; }
+
+  /* ── QUOTE ── */
+  .quote-section {
+    background: #fff;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .quran-quote {
+    max-width: 700px;
+    margin: 0 auto;
+    text-align: center;
+  }
+  .quran-quote blockquote {
+    font-family: 'Bree Serif', serif;
+    font-size: clamp(20px, 3vw, 30px);
+    color: var(--ink);
+    line-height: 1.5;
+    margin-bottom: 16px;
+    position: relative;
+  }
+  .quran-quote blockquote::before {
+    content: '\201C';
+    font-size: 80px;
+    color: var(--red);
+    opacity: .15;
+    position: absolute;
+    top: -20px;
+    left: -10px;
+    line-height: 1;
+    font-family: Georgia, serif;
+  }
+  .quran-quote cite {
+    font-size: 14px;
+    color: var(--red);
+    font-style: normal;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  /* ── WHO WE ARE ── */
+  .who-we-are { background: var(--cream); }
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 60px;
+    align-items: start;
+    margin-top: 40px;
+  }
+  .values-list { list-style: none; margin-top: 16px; }
+  .values-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 15px;
+  }
+  .values-list li:last-child { border-bottom: none; }
+  .values-list .tick {
+    width: 22px;
+    height: 22px;
+    background: var(--red);
+    border-radius: 50%;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  /* ── CTA ── */
+  .cta-section {
+    background: var(--ink);
+    color: #fff;
+    text-align: center;
+  }
+  .cta-section .section-title { color: #fff; }
+  .cta-section p { color: #aaa; font-size: 16px; max-width: 520px; margin: 16px auto 36px; }
+  .cta-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .btn-white {
+    background: #fff;
+    color: var(--ink);
+    padding: 14px 32px;
+    border-radius: 50px;
+    font-weight: 700;
+    font-size: 15px;
+    transition: transform .2s;
+  }
+  .btn-white:hover { transform: translateY(-2px); }
+  .btn-red-outline {
+    color: #fff;
+    padding: 14px 32px;
+    border-radius: 50px;
+    font-weight: 600;
+    font-size: 15px;
+    border: 2px solid rgba(255,255,255,0.25);
+    transition: border-color .2s, background .2s;
+  }
+  .btn-red-outline:hover { border-color: rgba(255,255,255,.6); background: rgba(255,255,255,0.05); }
+
+  /* ── FOOTER ── */
+  footer {
+    background: #111;
+    color: #666;
+    text-align: center;
+    padding: 24px 32px;
+    font-size: 13px;
+  }
+  footer a { color: #888; }
+
+  /* ── FADE IN ── */
+  .fade-in {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity .6s ease, transform .6s ease;
+  }
+  .fade-in.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 700px) {
+    section { padding: 60px 20px; }
+    .pillars { grid-template-columns: repeat(3, 1fr); }
+    .steps {
+      grid-template-columns: 1fr;
+      gap: 20px;
+    }
+    .step-arrow { display: none; }
+    .stats-grid { grid-template-columns: 1fr; gap: 28px; }
+    .two-col { grid-template-columns: 1fr; gap: 32px; }
+    nav { padding: 12px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── NAV ── -->
+<nav>
+  <div class="nav-logo">
+    <img src="data:image/png;base64,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" alt="NZF" />
+  </div>
+  <a href="https://www.nzf.org.au/" class="nav-cta">Visit NZF →</a>
+</nav>
+
+<!-- ── HERO ── -->
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-inner">
+    <div class="hero-eyebrow">
+      Implementing the benefits of Zakat
+    </div>
+    <h1>
+      Putting <em>Zakat</em> to work<br>right here in Australia.
+    </h1>
+    <p>
+      National Zakat Foundation is the only organisation in Australia dedicated entirely to collecting and distributing Zakat locally, helping Australian Muslims in genuine need rebuild their lives.
+    </p>
+    <div class="hero-actions">
+      <a href="https://www.nzf.org.au/pay/" class="btn-primary">Give Zakat</a>
+      <a href="https://www.nzf.org.au/apply/" class="btn-ghost">Apply for Help</a>
+    </div>
+    <div class="scroll-hint">
+      <span>Learn more</span>
+      <span class="scroll-arrow">↓</span>
+    </div>
+  </div>
+</section>
+
+<!-- ── WHAT IS ZAKAT ── -->
+<section class="zakat-section">
+  <div class="section-inner fade-in">
+    <div class="section-tag">Start here</div>
+    <h2 class="section-title">What is Zakat?</h2>
+    <div class="section-body">
+      <p>Islam has five core pillars: fundamental practices that every Muslim is called to observe. Zakat is the third. It's an annual obligation to give a fixed portion of your wealth (2.5%) to those who genuinely need it.</p>
+      <p>It's not charity in the optional sense. For Muslims who own wealth above a minimum threshold (called the Nisab), Zakat is a religious duty. It's designed to circulate wealth through society and ensure no one in the community is left behind.</p>
+    </div>
+    <div class="pillars">
+      <div class="pillar"><div class="pillar-num">1st</div><div class="pillar-name">Shahada<br><span style="opacity:.5;font-size:11px;">Declaration of Faith</span></div></div>
+      <div class="pillar"><div class="pillar-num">2nd</div><div class="pillar-name">Salah<br><span style="opacity:.5;font-size:11px;">Prayer</span></div></div>
+      <div class="pillar active"><div class="pillar-num">3rd</div><div class="pillar-name">Zakat<br><span style="font-size:11px;opacity:.8;">Giving</span></div></div>
+      <div class="pillar"><div class="pillar-num">4th</div><div class="pillar-name">Sawm<br><span style="opacity:.5;font-size:11px;">Fasting</span></div></div>
+      <div class="pillar"><div class="pillar-num">5th</div><div class="pillar-name">Hajj<br><span style="opacity:.5;font-size:11px;">Pilgrimage</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── HOW IT WORKS ── -->
+<section class="how-section">
+  <div class="section-inner fade-in">
+    <div class="section-tag">How it works</div>
+    <h2 class="section-title">Simple in concept. Powerful in practice.</h2>
+    <div class="section-body">
+      <p>NZF connects the people who are obligated to give Zakat with the people who are entitled to receive it, right here in Australia.</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-icon">🧮</div>
+        <h3>You calculate</h3>
+        <p>Work out how much Zakat you owe using NZF's free online calculator.</p>
+      </div>
+      <div class="step-arrow">→</div>
+      <div class="step">
+        <div class="step-icon">🤲</div>
+        <h3>You give</h3>
+        <p>Donate online, by bank transfer, or through NZF's simple payment tools.</p>
+      </div>
+      <div class="step-arrow">→</div>
+      <div class="step">
+        <div class="step-icon">❤️</div>
+        <h3>We distribute</h3>
+        <p>NZF's team carefully assesses applications and distributes Zakat to those who qualify.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── STATS ── -->
+<section class="stats-section">
+  <div class="section-inner fade-in" style="text-align:center;">
+    <div class="section-tag" style="color:#f5a0a0;">Since 2013</div>
+    <h2 class="section-title" style="color:#fff;">This is what local Zakat does.</h2>
+    <div class="stats-grid">
+      <div>
+        <div class="stat-number">$27.6m</div>
+        <div class="stat-label">Zakat distributed to Australian Muslims in need</div>
+      </div>
+      <div>
+        <div class="stat-number">28,000+</div>
+        <div class="stat-label">Applications received from people seeking help</div>
+      </div>
+      <div>
+        <div class="stat-number">25,000+</div>
+        <div class="stat-label">Donors across Australia who give locally</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── WHO WE HELP ── -->
+<section class="who-section">
+  <div class="section-inner fade-in">
+    <div class="section-tag">Who we help</div>
+    <h2 class="section-title">Real people. Real need.</h2>
+    <div class="section-body">
+      <p>The Quran identifies eight categories of people who are eligible to receive Zakat. NZF focuses on helping Muslims in Australia who fall into these categories. Many of them you'd never know were struggling.</p>
+    </div>
+    <div class="who-grid">
+      <div class="who-card">
+        <div class="who-icon">🏠</div>
+        <h4>Families in Crisis</h4>
+        <p>Facing eviction, unable to pay rent or utilities, or fleeing unsafe situations.</p>
+      </div>
+      <div class="who-card">
+        <div class="who-icon">👩‍👧</div>
+        <h4>Single Parents</h4>
+        <p>Often isolated, with no second income and children depending on them.</p>
+      </div>
+      <div class="who-card">
+        <div class="who-icon">🏥</div>
+        <h4>Illness & Disability</h4>
+        <p>Unable to work due to medical conditions, surgery recovery, or disability.</p>
+      </div>
+      <div class="who-card">
+        <div class="who-icon">🌏</div>
+        <h4>Refugees & New Arrivals</h4>
+        <p>Rebuilding from nothing, often with no government support or right to work.</p>
+      </div>
+      <div class="who-card">
+        <div class="who-icon">📖</div>
+        <h4>New Muslims</h4>
+        <p>Converts who've lost family support after embracing Islam.</p>
+      </div>
+      <div class="who-card">
+        <div class="who-icon">🌿</div>
+        <h4>The Working Poor</h4>
+        <p>Employed but still unable to cover rent, food, or school fees as costs rise.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── QUOTE ── -->
+<section class="quote-section">
+  <div class="section-inner fade-in">
+    <div class="quran-quote">
+      <blockquote>
+        "And establish prayer and give Zakat, and whatever good you put forward for yourselves, you will find it with Allah."
+      </blockquote>
+      <cite>Qur'an, 2:110</cite>
+    </div>
+  </div>
+</section>
+
+<!-- ── WHO WE ARE ── -->
+<section class="who-we-are">
+  <div class="section-inner fade-in">
+    <div class="section-tag">About us</div>
+    <h2 class="section-title">What makes NZF different?</h2>
+    <div class="two-col">
+      <div>
+        <div class="section-body">
+          <p>NZF was founded in Australia in 2013 with one focus: to manage Zakat properly, locally, and with full accountability to Islamic principles.</p>
+          <p>Most people pay their Zakat overseas, to international charities working in conflict zones. NZF asks a different question: what about the Muslims right next door who are quietly struggling?</p>
+          <p>We're a registered charity with full DGR (tax deductible) status, governed by an Islamic framework, and transparent about every dollar we receive and distribute.</p>
+        </div>
+      </div>
+      <div>
+        <ul class="values-list">
+          <li>
+            <span class="tick">✓</span>
+            <span><strong>100% Zakat compliant.</strong> Distribution follows Quranic principles, not just general charity rules.</span>
+          </li>
+          <li>
+            <span class="tick">✓</span>
+            <span><strong>Locally focused.</strong> Every dollar given to NZF stays in Australia and helps Australians.</span>
+          </li>
+          <li>
+            <span class="tick">✓</span>
+            <span><strong>Casework, not handouts.</strong> We assess each application carefully to ensure funds reach those with genuine need.</span>
+          </li>
+          <li>
+            <span class="tick">✓</span>
+            <span><strong>Tax deductible.</strong> All donations above $2 are fully tax deductible in Australia.</span>
+          </li>
+          <li>
+            <span class="tick">✓</span>
+            <span><strong>Trusted by scholars.</strong> Our approach is grounded in Islamic scholarship, not just administration.</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CTA ── -->
+<section class="cta-section">
+  <div class="section-inner fade-in">
+    <div class="section-tag" style="color:#f0a0a0;">Get involved</div>
+    <h2 class="section-title">Ready to put your Zakat to work?</h2>
+    <p>Whether you're looking to give, need help yourself, or just want to learn more, NZF is here.</p>
+    <div class="cta-actions">
+      <a href="https://www.nzf.org.au/calculate/" class="btn-white">Calculate My Zakat</a>
+      <a href="https://www.nzf.org.au/pay/" class="btn-primary">Donate Now</a>
+      <a href="https://www.nzf.org.au/apply/" class="btn-red-outline">Apply for Help</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── FOOTER ── -->
+<footer>
+  <p>National Zakat Foundation Australia &nbsp;·&nbsp; <a href="https://www.nzf.org.au">nzf.org.au</a> &nbsp;·&nbsp; <a href="tel:1300663729">1300 663 729</a> &nbsp;·&nbsp; All donations above $2 are tax deductible.</p>
+</footer>
+
+<script>
+  // Scroll-triggered fade-in
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+        observer.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.12 });
+
+  document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+</script>
+
+<!-- ── NZF CHAT AGENT ── -->
+<script>
+  window.NZFChatConfig = {
+    apiUrl: '/.netlify/functions/chat'
+  };
+</script>
+<script src="/nzf-chat-widget.js" defer></script>
+
+</body>
+</html>
