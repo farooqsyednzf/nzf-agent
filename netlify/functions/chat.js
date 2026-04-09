@@ -13,7 +13,7 @@ const ANTHROPIC_API_KEY  = process.env.ANTHROPIC_API_KEY;
 // Sentinel string Claude outputs when it has no real data to work with.
 // The handler intercepts this and returns a hardcoded error — Claude never composes the error message.
 const NO_DATA_SENTINEL   = '__NZF_NO_DATA__';
-const NO_DATA_RESPONSE   = "I'm sorry, I wasn't able to retrieve information to answer your question right now. Please try again in a moment, or contact us directly at **1300 663 729** or **nzf.org.au/contact/** and our team will be happy to help. Jazakallah khair for your patience.";
+const NO_DATA_RESPONSE   = "I'm sorry, I wasn't able to retrieve information to answer your question right now. Please try again in a moment, or contact us directly at **1300 663 729** or **https://www.nzf.org.au/contact/** and our team will be happy to help. Jazakallah khair for your patience.";
 
 // ─── Department & Agent IDs ────────────────────────────────────────────────
 const DEPT = {
@@ -396,7 +396,7 @@ STEP 3 — OFFER TEAM CONTACT
 After answering (whether from Coda or website), always ask:
 "Would you like one of our team members to get in touch with you about this?"
 If yes → go to Step 4.
-If no → close warmly with: "You're always welcome to reach us at 1300 663 729 or nzf.org.au/contact/"
+If no → close warmly with: "You're always welcome to reach us at 1300 663 729 or https://www.nzf.org.au/contact/"
 
 STEP 4 — COLLECT DETAILS FOR TICKET
 Collect the visitor's contact preference (email or mobile). If mobile, ask for their number.
@@ -410,8 +410,23 @@ When you have all required details, call create_zoho_desk_ticket with:
 The handler will automatically append the full transcript — you do not need to include it.
 
 OFF-TOPIC QUESTIONS:
-If the question is clearly unrelated to Zakat, Islamic finance, NZF, donations, applications, or anything we do — for example questions about salaries, politics, cooking, sports, other organisations — output immediately: __NZF_NO_DATA__
-Do NOT call any tools. Do NOT try to find a partial answer. Just output: __NZF_NO_DATA__
+If the question is clearly unrelated to Zakat, Islamic finance, NZF, donations, applications, or anything we do — for example questions about salaries, politics, cooking, sports, or other organisations:
+
+Do NOT call any tools. Do NOT try to answer the question.
+
+Instead, respond warmly with something like:
+"That's a little outside what I can help with here — I'm set up to assist with NZF and Zakat-related questions. However, if you'd like to get in touch with one of our team members for anything at all, I'm happy to arrange that. Would you like me to put you in touch with someone?"
+
+If they say YES → follow the standard ticket flow:
+- Ask email or mobile preference
+- If mobile → ask for their number
+- Create ticket → department: general → Munir
+- Subject: "Website chat — general enquiry (out of scope query)"
+
+If they say NO → close warmly:
+"No problem at all. If you ever have questions about Zakat or NZF, I'm here. You can also reach us at 1300 663 729 or https://www.nzf.org.au/contact/ anytime."
+
+Do NOT output __NZF_NO_DATA__ for off-topic questions — only use that sentinel when both Coda and the website return no results for a genuine NZF-related query.
 
 NO DATA FALLBACK:
 If Coda is empty AND search_nzf_website returns nothing → output EXACTLY: __NZF_NO_DATA__
@@ -426,7 +441,7 @@ Always offer to raise a ticket and connect the visitor with a team member when:
 
 When offering: say "I can raise this with one of our team members who can discuss your situation directly — would that be helpful?"
 If they say yes → ask email or mobile preference → create ticket → zakat_education for Zakat questions, general for everything else.
-If they say no → close warmly with contact details: 1300 663 729 or nzf.org.au/contact/
+If they say no → close warmly with contact details: 1300 663 729 or https://www.nzf.org.au/contact/
 
 NEVER redirect someone to "contact a local mosque" or external parties without first offering to raise a ticket with our own team.
 
@@ -443,7 +458,7 @@ Everything else → general → Munir
 Contact preference: ask email or mobile. If mobile → ask for number → add to ticket.
 
 Ticket success → confirm warmly, name the assignee, give ticket number.
-Ticket failure → "Please contact us at 1300 663 729 or nzf.org.au/contact/"
+Ticket failure → "Please contact us at 1300 663 729 or https://www.nzf.org.au/contact/"
 
 ━━━ DONATION RECEIPT REQUESTS ━━━
 If a visitor asks about a donation receipt, tax receipt, or DGR receipt — this is a special flow. Follow these steps exactly:
@@ -630,7 +645,7 @@ exports.handler = async (event) => {
             statusCode: 200,
             headers:    CORS,
             body:       JSON.stringify({
-              reply: "I'm sorry, something went wrong on our end and I wasn't able to raise that ticket. Please contact us directly at **1300 663 729** or visit **nzf.org.au/contact/** and our team will be happy to help.",
+              reply: "I'm sorry, something went wrong on our end and I wasn't able to raise that ticket. Please contact us directly at **1300 663 729** or visit **https://www.nzf.org.au/contact/** and our team will be happy to help.",
             }),
           };
         }
@@ -664,7 +679,7 @@ exports.handler = async (event) => {
     // it is hallucinating. Intercept and return a real error.
     if (ticketOutcome === null && /ticket\s*#?\d+/i.test(finalReply)) {
       console.error('[Hallucination detected] Claude mentioned a ticket number with no real ticketOutcome. Overriding.');
-      finalReply = "I'm sorry, something went wrong while raising that ticket. Please contact us directly at **1300 663 729** or visit **nzf.org.au/contact/** and our team will be happy to help.";
+      finalReply = "I'm sorry, something went wrong while raising that ticket. Please contact us directly at **1300 663 729** or visit **https://www.nzf.org.au/contact/** and our team will be happy to help.";
     }
 
     return {
