@@ -348,11 +348,12 @@ const TOOLS = [
 function buildSystemPrompt(visitorName, visitorEmail, codaResults) {
   const identity = visitorName && visitorEmail ? `\nVISITOR: ${visitorName} | ${visitorEmail}\n` : '';
 
+  // Only include Coda section if there are results — keeps prompt lean for non-knowledge queries
   const codaSection = codaResults.length > 0
     ? `\n━━━ CODA KNOWLEDGE BASE — USE THIS FIRST ━━━\n` +
       codaResults.map((r, i) => `[${i+1}] Category: ${r.category}\nQ: ${r.question}\nA: ${r.answer}`).join('\n\n') +
       `\n━━━ END OF CODA RESULTS ━━━\n`
-    : `\n━━━ CODA: No matching results for this query ━━━\n`;
+    : '';  // No Coda section at all when no results — avoids inflating the prompt
 
   return `You are the NZF (National Zakat Foundation Australia) website assistant. You represent NZF — always say "we", "our", "us". Greet new visitors with "Assalamu Alaikum".
 ${identity}${codaSection}
@@ -476,6 +477,37 @@ If unclear whether the visitor means a general Zakat question, their own applica
 Warm, human, courteous. Islamic not-for-profit — be respectful always. SHORT replies (2-4 sentences). One idea per message. Plain language.`;
 }
 
+// ─── Query pre-classifier ─────────────────────────────────────────────────
+// Determines whether to run a Coda search for this message.
+// Skips Coda for query types where results would never be used:
+// - Personal application/case queries → go straight to ticket
+// - Personal donation/payment queries → go straight to ticket
+// - Receipt requests → handled by dedicated receipt flow
+// - Off-topic queries → sentinel returned immediately
+// - Zakat knowledge questions → redirected to Q&A page
+//
+// Only searches Coda for NZF organisational queries where content may be relevant.
+function shouldSearchCoda(query) {
+  const q = query.toLowerCase();
+
+  // Personal application / case
+  if (/(my application|my case|application status|case status|have you received|when will i hear|approved|rejected|submitted an application|applied to nzf)/.test(q)) return false;
+
+  // Personal donation / payment
+  if (/(my donation|my payment|i donated|i paid|i gave|my zakat payment|my sadaqah|my direct debit|my recurring)/.test(q)) return false;
+
+  // Receipt requests
+  if (/(receipt|tax receipt|dgr|deductible)/.test(q)) return false;
+
+  // Zakat knowledge → redirected to Q&A page, Coda not needed
+  if (/(nisab|hawl|zakat anniversary|zakatable|calculate zakat|how much zakat|what is zakat|zakat on|fidyah|kaffarah|zakat al.fitr|zakat ul.fitr|fitrah|sadaqah jariyah|riba|tainted wealth)/.test(q)) return false;
+
+  // Clearly off-topic
+  if (/(salary|ceo|staff|employee|weather|sport|recipe|news|politics|invest|stock market)/.test(q)) return false;
+
+  return true;
+}
+
 // ─── CORS ──────────────────────────────────────────────────────────────────
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
@@ -498,14 +530,18 @@ exports.handler = async (event) => {
       ? lastUserMsg.content
       : lastUserMsg?.content?.[0]?.text || '';
 
-    // Step 1: Search Coda immediately (cached after first call — near instant)
+    // Step 1: Pre-classify query — only search Coda when results would actually be used
     let codaResults = [];
-    try {
-      const rows = await getCodaRows();
-      codaResults = searchCodaRows(userQuery, rows);
-      console.log(`[Coda] "${userQuery.slice(0,60)}" → ${codaResults.length} results`);
-    } catch (err) {
-      console.error('[Coda error]', err.message);
+    if (shouldSearchCoda(userQuery)) {
+      try {
+        const rows = await getCodaRows();
+        codaResults = searchCodaRows(userQuery, rows);
+        console.log(`[Coda] "${userQuery.slice(0,60)}" → ${codaResults.length} results`);
+      } catch (err) {
+        console.error('[Coda error]', err.message);
+      }
+    } else {
+      console.log(`[Coda] Skipped for query: "${userQuery.slice(0,60)}"`);
     }
 
     // Step 2: Build system prompt with Coda results baked in
@@ -516,8 +552,8 @@ exports.handler = async (event) => {
 
     // Step 3: Single Claude call — no tool_use needed for Coda (already in context)
     let response = await anthropic.messages.create({
-      model:      'claude-haiku-4-5-20251001',
-      max_tokens: 700,
+      model:      'claude-sonnet-4-20250514',
+      max_tokens: 800,
       system:     systemPrompt,
       tools:      TOOLS,
       messages:   claudeMessages,
@@ -607,8 +643,8 @@ exports.handler = async (event) => {
       ];
 
       response = await anthropic.messages.create({
-        model:      'claude-haiku-4-5-20251001',
-        max_tokens: 700,
+        model:      'claude-sonnet-4-20250514',
+        max_tokens: 800,
         system:     systemPrompt,
         tools:      TOOLS,
         messages:   claudeMessages,
