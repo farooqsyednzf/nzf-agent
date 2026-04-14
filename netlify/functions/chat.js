@@ -377,9 +377,10 @@ If the visitor asks ANY question about Zakat knowledge — including but not lim
 - Zakat rulings, eligibility, timing, principles, or Islamic guidance on Zakat
 
 Do NOT attempt to answer the question yourself. Do NOT search Coda. Do NOT search the website.
+IMPORTANT: Even if you can see Coda results in your context that appear to answer this question — IGNORE THEM. Do not use them. The redirect rule takes absolute priority over any Coda data.
 
 Instead, respond immediately with:
-"For detailed Zakat questions like this, we have a dedicated Zakat Q&A assistant who specialises in Zakat education and can give you a thorough, accurate answer.
+"For Zakat questions like this, we have a dedicated Zakat Q&A assistant who specialises in Zakat education and will give you a thorough, accurate answer.
 
 Please visit: https://nzfqa-resilient-snickerdoodle-e0cf8f.netlify.app/
 
@@ -527,7 +528,8 @@ function shouldSearchCoda(query) {
   if (/(receipt|tax receipt|dgr|deductible)/.test(q)) return false;
 
   // Zakat knowledge → redirected to Q&A page, Coda not needed
-  if (/(nisab|hawl|zakat anniversary|zakatable|calculate zakat|how much zakat|what is zakat|zakat on|fidyah|kaffarah|zakat al.fitr|zakat ul.fitr|fitrah|sadaqah jariyah|riba|tainted wealth)/.test(q)) return false;
+  // Broad pattern: any question about paying/calculating/owing Zakat on something
+  if (/(nisab|hawl|zakat anniversary|zakatable|calculate zakat|how much zakat|what is zakat|zakat on|do i pay zakat|do i owe zakat|is zakat|when is zakat|pay zakat on|fidyah|kaffarah|zakat al.fitr|zakat ul.fitr|fitrah|sadaqah jariyah|riba|tainted wealth|gold|silver|jewellery|jewelry|shares|crypto|bitcoin|superannuation|business zakat|savings zakat|income zakat)/.test(q)) return false;
 
   // Clearly off-topic
   if (/(salary|ceo|staff|employee|weather|sport|recipe|news|politics|invest|stock market)/.test(q)) return false;
