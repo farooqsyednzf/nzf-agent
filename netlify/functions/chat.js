@@ -55,24 +55,36 @@ async function getCodaRows() {
 function searchCodaRows(query, rows) {
   const words = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
   if (!words.length) return [];
+
   const scored = rows.map(row => {
     const v        = row.values;
     const question = (v['Question'] || '').toLowerCase();
     const answer   = (v['Answer']   || '').toLowerCase();
     const tags     = (v['Tags']     || '').toLowerCase();
     const category = (v['Category'] || '').toLowerCase();
-    const haystack = `${question} ${answer} ${tags} ${category}`;
+
     let score = 0;
     for (const word of words) {
-      if (haystack.includes(word)) score += 1;
-      if (question.includes(word)) score += 2;
-      if (tags.includes(word))     score += 1;
+      // Exact match scoring (same weights as Q&A agent)
+      if (question.includes(word)) score += 3;  // highest signal
+      if (tags.includes(word))     score += 2;  // keyword field
+      if (answer.includes(word))   score += 1;  // answer body
+      if (category.includes(word)) score += 1;  // category bonus
+
+      // Prefix / stem matching — catches "deduct" → "deductible", "calc" → "calculate" etc.
+      if (word.length >= 4) {
+        const stem = word.slice(0, Math.ceil(word.length * 0.75)); // ~75% of word as stem
+        if (question.includes(stem) && !question.includes(word)) score += 2;
+        if (tags.includes(stem)     && !tags.includes(word))     score += 1.5;
+        if (answer.includes(stem)   && !answer.includes(word))   score += 0.5;
+      }
     }
     return { score, v };
   })
   .filter(r => r.score > 0)
   .sort((a, b) => b.score - a.score)
-  .slice(0, 4);
+  .slice(0, 8);  // top 8, matching Q&A agent
+
   return scored.map(r => ({
     category: r.v['Category'] || '',
     question: r.v['Question'] || '',
