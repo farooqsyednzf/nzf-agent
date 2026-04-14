@@ -369,29 +369,12 @@ function buildSystemPrompt(visitorName, visitorEmail, codaResults) {
 
   return `You are the NZF (National Zakat Foundation Australia) website assistant. You represent NZF — always say "we", "our", "us". Greet new visitors with "Assalamu Alaikum".
 ${identity}${codaSection}
-━━━ ZAKAT KNOWLEDGE QUESTIONS — REDIRECT FIRST ━━━
-If the visitor asks ANY question about Zakat knowledge — including but not limited to:
-- How to calculate Zakat (on savings, gold, super, shares, business, crypto, debts, etc.)
-- What things mean: Nisab, Zakat anniversary, Hawl, Zakatable assets, asnaf, fidyah, kaffarah, etc.
-- Whether something is subject to Zakat
-- Zakat rulings, eligibility, timing, principles, or Islamic guidance on Zakat
-
-Do NOT attempt to answer the question yourself. Do NOT search Coda. Do NOT search the website.
-IMPORTANT: Even if you can see Coda results in your context that appear to answer this question — IGNORE THEM. Do not use them. The redirect rule takes absolute priority over any Coda data.
-
-Instead, respond immediately with:
-"For Zakat questions like this, we have a dedicated Zakat Q&A assistant who specialises in Zakat education and will give you a thorough, accurate answer.
-
-Please visit: https://nzfqa-resilient-snickerdoodle-e0cf8f.netlify.app/
-
-Ask your question there and the Zakat assistant will help you directly. Is there anything else I can help you with regarding NZF?"
-
-This applies to ALL Zakat knowledge questions regardless of how simple or complex they seem.
-The ONLY exceptions where you do NOT redirect are:
-- Questions about NZF as an organisation (how we work, programs, how to apply, how to donate, contact)
-- Questions about the visitor's own application or case
-- Questions about a donation or payment the visitor made
-- Receipt requests
+━━━ ZAKAT KNOWLEDGE QUESTIONS — NO CODA RESULTS FOUND ━━━
+If the visitor has asked a Zakat knowledge question and there are no Coda results in your context, it means our knowledge base does not have a specific answer. In this case:
+- Search the NZF website for relevant information and provide a helpful response
+- Include the relevant URL so the visitor can read more
+- After answering, always offer: "Would you like one of our team members to follow up with you on this?"
+- If the website also has nothing relevant, redirect to the Q&A specialist: https://nzfqa-resilient-snickerdoodle-e0cf8f.netlify.app/
 
 ━━━ STRICT 5-STEP RESPONSE SEQUENCE — ALWAYS FOLLOW THIS ORDER ━━━
 
@@ -511,29 +494,33 @@ Warm, human, courteous. Islamic not-for-profit — be respectful always. SHORT r
 // - Personal application/case queries → go straight to ticket
 // - Personal donation/payment queries → go straight to ticket
 // - Receipt requests → handled by dedicated receipt flow
-// - Off-topic queries → sentinel returned immediately
-// - Zakat knowledge questions → redirected to Q&A page
-//
-// Only searches Coda for NZF organisational queries where content may be relevant.
+// - Off-topic queries → no Coda needed
+
+// Detects Zakat knowledge questions — handler uses this to decide redirect vs answer
+function isZakatKnowledgeQuery(query) {
+  const q = query.toLowerCase();
+  return /\b(nisab|hawl|zakat anniversary|zakatable|calculate zakat|how much zakat|what is zakat|zakat on|do i pay zakat|do i owe zakat|is zakat|when is zakat|pay zakat on|pay zakat|owe zakat|fidyah|kaffarah|zakat al.fitr|zakat ul.fitr|fitrah|sadaqah jariyah|riba|tainted wealth|gold|silver|jewellery|jewelry|shares|crypto|bitcoin|superannuation|business zakat|savings zakat|income zakat|investment|profit|asset|wealth|obligation|lunar year|lunar|annivers|threshold|eligible for zakat|liable for zakat)\b/.test(q);
+}
+
+// Determines whether to run Coda search.
+// Now includes Zakat queries — results determine redirect vs answer.
 function shouldSearchCoda(query) {
   const q = query.toLowerCase();
 
-  // Personal application / case
-  if (/(my application|my case|application status|case status|have you received|when will i hear|approved|rejected|submitted an application|applied to nzf)/.test(q)) return false;
+  // Personal application / case → straight to ticket
+  if (/\b(my application|my case|application status|case status|have you received|when will i hear|approved|rejected|submitted an application|applied to nzf)\b/.test(q)) return false;
 
-  // Personal donation / payment
-  if (/(my donation|my payment|i donated|i paid|i gave|my zakat payment|my sadaqah|my direct debit|my recurring)/.test(q)) return false;
+  // Personal donation / payment → straight to ticket
+  if (/\b(my donation|my payment|i donated|i paid|i gave|my zakat payment|my sadaqah|my direct debit|my recurring)\b/.test(q)) return false;
 
-  // Receipt requests
-  if (/(receipt|tax receipt|dgr|deductible)/.test(q)) return false;
-
-  // Zakat knowledge → redirected to Q&A page, Coda not needed
-  // Broad pattern: any question about paying/calculating/owing Zakat on something
-  if (/(nisab|hawl|zakat anniversary|zakatable|calculate zakat|how much zakat|what is zakat|zakat on|do i pay zakat|do i owe zakat|is zakat|when is zakat|pay zakat on|fidyah|kaffarah|zakat al.fitr|zakat ul.fitr|fitrah|sadaqah jariyah|riba|tainted wealth|gold|silver|jewellery|jewelry|shares|crypto|bitcoin|superannuation|business zakat|savings zakat|income zakat)/.test(q)) return false;
+  // Receipt requests → dedicated flow
+  if (/\b(receipt|tax receipt|dgr|deductible)\b/.test(q)) return false;
 
   // Clearly off-topic
-  if (/(salary|ceo|staff|employee|weather|sport|recipe|news|politics|invest|stock market)/.test(q)) return false;
+  if (/\b(salary|ceo|staff|employee|weather|sport|recipe|news|politics|invest|stock market)\b/.test(q)) return false;
 
+  // Everything else — including Zakat knowledge queries — search Coda
+  // Handler decides: redirect if Coda has results, answer from website if not
   return true;
 }
 
@@ -559,19 +546,36 @@ exports.handler = async (event) => {
       ? lastUserMsg.content
       : lastUserMsg?.content?.[0]?.text || '';
 
-    // Step 1: Pre-classify query — only search Coda when results would actually be used
+    // Step 1: Pre-classify and search Coda if relevant
     let codaResults = [];
+    const zakatQuery = isZakatKnowledgeQuery(userQuery);
+
     if (shouldSearchCoda(userQuery)) {
       try {
         const rows = await getCodaRows();
         codaResults = searchCodaRows(userQuery, rows);
-        console.log(`[Coda] "${userQuery.slice(0,60)}" → ${codaResults.length} results`);
+        console.log(`[Coda] "${userQuery.slice(0,60)}" → ${codaResults.length} results (zakatQuery: ${zakatQuery})`);
       } catch (err) {
         console.error('[Coda error]', err.message);
       }
     } else {
       console.log(`[Coda] Skipped for query: "${userQuery.slice(0,60)}"`);
     }
+
+    // Step 1b: Zakat knowledge query + Coda has relevant results
+    // → redirect to specialist Q&A page immediately, no Claude call needed
+    if (zakatQuery && codaResults.length > 0) {
+      console.log(`[Zakat redirect] Found ${codaResults.length} Coda results — redirecting to Q&A page`);
+      return {
+        statusCode: 200,
+        headers:    CORS,
+        body:       JSON.stringify({
+          reply: `For Zakat questions like this, we have a dedicated Zakat Q&A assistant who specialises in Zakat education and will give you a thorough, accurate answer — including the specific question you just asked.\n\nPlease visit: https://nzfqa-resilient-snickerdoodle-e0cf8f.netlify.app/\n\nAsk your question there and the Zakat assistant will help you directly. Is there anything else I can help you with regarding NZF?`,
+        }),
+      };
+    }
+    // Step 1c: Zakat knowledge query + Coda has NO results
+    // → fall through to normal flow (Claude will search website and answer)
 
     // Step 2: Build system prompt with Coda results baked in
     const systemPrompt = buildSystemPrompt(visitorName, visitorEmail, codaResults);
